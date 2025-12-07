@@ -236,6 +236,8 @@
     <script src="miniscript.js"></script>
     <script>
         let miniscript_to_json;
+        let miniscript_to_rete_json;
+        let miniscript_to_complete_rete_json;
         let testResults = [];
         let allTests = [];
         let showFailedOnly = false;
@@ -637,6 +639,397 @@
                         }
                     }
                 ]
+            },
+            {
+                name: "Rete JSON Basic Tests",
+                tests: [
+                    {
+                        name: "Simple pk() generates valid Rete JSON",
+                        run: () => {
+                            const result = miniscript_to_rete_json("pk(A)");
+                            assertJsonValid(result, "Should be valid JSON");
+                            const rete = JSON.parse(result);
+                            assertEqual(rete.id, "demo@0.1.0", "Should have correct editor ID");
+                            assertExists(rete.nodes, "Should have nodes object");
+                            assertExists(rete.comments, "Should have comments array");
+                        }
+                    },
+                    {
+                        name: "pk(A) creates Key node",
+                        run: () => {
+                            const result = miniscript_to_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const keyNode = nodes.find(n => n.name === "Key");
+                            assertExists(keyNode, "Should have a Key node");
+                            assertEqual(keyNode.data.key, "A", "Key node should have key 'A'");
+                        }
+                    },
+                    {
+                        name: "and_v creates And node with connections",
+                        run: () => {
+                            const result = miniscript_to_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const andNode = nodes.find(n => n.name === "And");
+                            assertExists(andNode, "Should have an And node");
+                            assertExists(andNode.inputs.pol1, "Should have pol1 input");
+                            assertExists(andNode.inputs.pol2, "Should have pol2 input");
+                        }
+                    },
+                    {
+                        name: "or_c creates Or node",
+                        run: () => {
+                            const result = miniscript_to_rete_json("or_c(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const orNode = nodes.find(n => n.name === "Or");
+                            assertExists(orNode, "Should have an Or node");
+                        }
+                    },
+                    {
+                        name: "after() creates After node with num",
+                        run: () => {
+                            const result = miniscript_to_rete_json("after(100)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const afterNode = nodes.find(n => n.name === "After");
+                            assertExists(afterNode, "Should have an After node");
+                            assertEqual(afterNode.data.num, 100, "Should have num=100");
+                        }
+                    },
+                    {
+                        name: "older() creates Older node with num",
+                        run: () => {
+                            const result = miniscript_to_rete_json("older(500)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const olderNode = nodes.find(n => n.name === "Older");
+                            assertExists(olderNode, "Should have an Older node");
+                            assertEqual(olderNode.data.num, 500, "Should have num=500");
+                        }
+                    },
+                    {
+                        name: "thresh(2,...) creates Threshold node",
+                        run: () => {
+                            const result = miniscript_to_rete_json("thresh(2,pk(A),s:pk(B),s:pk(C))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const threshNode = nodes.find(n => n.name === "Threshold");
+                            assertExists(threshNode, "Should have a Threshold node");
+                            assertEqual(threshNode.data.thresh, 2, "Should have thresh=2");
+                        }
+                    },
+                    {
+                        name: "Node positions are set",
+                        run: () => {
+                            const result = miniscript_to_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            nodes.forEach(node => {
+                                assertExists(node.position, "Each node should have position");
+                                assertTrue(Array.isArray(node.position), "Position should be array");
+                                assertEqual(node.position.length, 2, "Position should have 2 elements");
+                            });
+                        }
+                    },
+                    {
+                        name: "Invalid miniscript returns error",
+                        run: () => {
+                            const result = miniscript_to_rete_json("invalid_expr");
+                            const rete = JSON.parse(result);
+                            assertExists(rete.error, "Should have error field");
+                            assertEqual(rete.valid, false, "Should have valid=false");
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Complete Rete JSON Tests",
+                tests: [
+                    {
+                        name: "Complete mode adds BIP39 nodes",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const bip39Node = nodes.find(n => n.name === "BIP39");
+                            assertExists(bip39Node, "Should have a BIP39 node");
+                            assertExists(bip39Node.data.mnemonic, "BIP39 should have mnemonic");
+                            assertTrue(bip39Node.data.mnemonic.includes("bacon"), "Mnemonic should contain 'bacon'");
+                        }
+                    },
+                    {
+                        name: "Complete mode adds Descriptor node",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const descNode = nodes.find(n => n.name === "Descriptor");
+                            assertExists(descNode, "Should have a Descriptor node");
+                        }
+                    },
+                    {
+                        name: "Complete mode adds Address node",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const addrNode = nodes.find(n => n.name === "Address");
+                            assertExists(addrNode, "Should have an Address node");
+                            assertEqual(addrNode.data.idx, 0, "Address should have idx=0");
+                        }
+                    },
+                    {
+                        name: "Multiple keys get multiple BIP39 nodes",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const bip39Nodes = nodes.filter(n => n.name === "BIP39");
+                            assertEqual(bip39Nodes.length, 2, "Should have 2 BIP39 nodes for 2 keys");
+                        }
+                    },
+                    {
+                        name: "Keys are renamed to bacon N",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            const keyNames = keyNodes.map(n => n.data.key).sort();
+                            assertTrue(keyNames.includes("bacon 1"), "Should have 'bacon 1' key");
+                            assertTrue(keyNames.includes("bacon 2"), "Should have 'bacon 2' key");
+                        }
+                    },
+                    {
+                        name: "BIP39 connects to Key",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const bip39Node = nodes.find(n => n.name === "BIP39");
+                            const keyNode = nodes.find(n => n.name === "Key");
+                            
+                            // Check BIP39 output connects to Key
+                            assertTrue(bip39Node.outputs.key.connections.length > 0, "BIP39 should have output connection");
+                            assertEqual(bip39Node.outputs.key.connections[0].node, keyNode.id, "BIP39 should connect to Key");
+                        }
+                    },
+                    {
+                        name: "Descriptor connects to root policy",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const descNode = nodes.find(n => n.name === "Descriptor");
+                            
+                            // Descriptor should have an input connection
+                            assertTrue(Object.keys(descNode.inputs).length > 0, "Descriptor should have inputs");
+                        }
+                    },
+                    {
+                        name: "Address connects to Descriptor",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const addrNode = nodes.find(n => n.name === "Address");
+                            const descNode = nodes.find(n => n.name === "Descriptor");
+                            
+                            // Address should connect to Descriptor
+                            assertExists(addrNode.inputs.desc, "Address should have desc input");
+                            assertTrue(addrNode.inputs.desc.connections.length > 0, "Address should have connection");
+                            assertEqual(addrNode.inputs.desc.connections[0].node, descNode.id, "Address should connect to Descriptor");
+                        }
+                    },
+                    {
+                        name: "Complete mode layout: BIP39 leftmost, Address rightmost",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            const bip39Nodes = nodes.filter(n => n.name === "BIP39");
+                            const addrNode = nodes.find(n => n.name === "Address");
+                            
+                            // All BIP39 nodes should be to the left of Address
+                            bip39Nodes.forEach(bip39 => {
+                                assertTrue(bip39.position[0] < addrNode.position[0], 
+                                    "BIP39 should be left of Address");
+                            });
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Socket Name Validation (miniscript.fun compatibility)",
+                tests: [
+                    {
+                        name: "Key nodes have 'key' input socket (not 'pol')",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const keyNode = nodes.find(n => n.name === "Key");
+                            
+                            // Key should have 'key' input, not 'pol'
+                            assertExists(keyNode.inputs.key, "Key node should have 'key' input socket");
+                            assertTrue(!keyNode.inputs.pol, "Key node should NOT have 'pol' input socket");
+                        }
+                    },
+                    {
+                        name: "Key nodes output on 'key' socket",
+                        run: () => {
+                            const result = miniscript_to_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            keyNodes.forEach(keyNode => {
+                                assertExists(keyNode.outputs.key, "Key node should have 'key' output socket");
+                                assertTrue(!keyNode.outputs.pol, "Key node should NOT have 'pol' output socket");
+                            });
+                        }
+                    },
+                    {
+                        name: "Address nodes have 'desc' input socket (not 'pol')",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const addrNode = nodes.find(n => n.name === "Address");
+                            
+                            // Address should have 'desc' input, not 'pol'
+                            assertExists(addrNode.inputs.desc, "Address node should have 'desc' input socket");
+                            assertTrue(!addrNode.inputs.pol, "Address node should NOT have 'pol' input socket");
+                        }
+                    },
+                    {
+                        name: "Descriptor nodes have 'pol' input and 'desc' output",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const descNode = nodes.find(n => n.name === "Descriptor");
+                            
+                            assertExists(descNode.inputs.pol, "Descriptor should have 'pol' input socket");
+                            assertExists(descNode.outputs.desc, "Descriptor should have 'desc' output socket");
+                        }
+                    },
+                    {
+                        name: "BIP39 nodes have 'key' output socket",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const bip39Node = nodes.find(n => n.name === "BIP39");
+                            
+                            assertExists(bip39Node.outputs.key, "BIP39 should have 'key' output socket");
+                        }
+                    },
+                    {
+                        name: "And nodes have pol1/pol2 inputs and pol output",
+                        run: () => {
+                            const result = miniscript_to_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const andNode = nodes.find(n => n.name === "And");
+                            
+                            assertExists(andNode.inputs.pol1, "And should have 'pol1' input");
+                            assertExists(andNode.inputs.pol2, "And should have 'pol2' input");
+                            assertExists(andNode.outputs.pol, "And should have 'pol' output");
+                        }
+                    },
+                    {
+                        name: "AndOr nodes have cond/pol1/pol2 inputs",
+                        run: () => {
+                            const result = miniscript_to_rete_json("andor(pk(A),pk(B),pk(C))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const andorNode = nodes.find(n => n.name === "AndOr");
+                            
+                            assertExists(andorNode.inputs.cond, "AndOr should have 'cond' input");
+                            assertExists(andorNode.inputs.pol1, "AndOr should have 'pol1' input");
+                            assertExists(andorNode.inputs.pol2, "AndOr should have 'pol2' input");
+                        }
+                    },
+                    {
+                        name: "Complex andor graph has correct socket names",
+                        run: () => {
+                            // This is the miniscript from the bug report
+                            const ms = "andor(pk(key_remote),or_i(and_v(v:pkh(key_local),hash160(H)),older(1008)),pk(key_revocation))";
+                            const result = miniscript_to_complete_rete_json(ms);
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Check all Key nodes have correct socket
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            keyNodes.forEach(keyNode => {
+                                if (Object.keys(keyNode.inputs).length > 0) {
+                                    assertExists(keyNode.inputs.key, `Key '${keyNode.data.key}' should have 'key' input socket`);
+                                }
+                            });
+                            
+                            // Check Address has desc input
+                            const addrNode = nodes.find(n => n.name === "Address");
+                            assertExists(addrNode.inputs.desc, "Address should have 'desc' input");
+                        }
+                    },
+                    {
+                        name: "All connections reference valid nodes",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(pk(A),or_c(pk(B),pk(C)))");
+                            const rete = JSON.parse(result);
+                            const nodeIds = new Set(Object.keys(rete.nodes).map(Number));
+                            
+                            Object.values(rete.nodes).forEach(node => {
+                                // Check input connections
+                                Object.values(node.inputs || {}).forEach(socket => {
+                                    (socket.connections || []).forEach(conn => {
+                                        assertTrue(nodeIds.has(conn.node), 
+                                            `Input connection from node ${node.id} references valid node ${conn.node}`);
+                                    });
+                                });
+                                
+                                // Check output connections
+                                Object.values(node.outputs || {}).forEach(socket => {
+                                    (socket.connections || []).forEach(conn => {
+                                        assertTrue(nodeIds.has(conn.node),
+                                            `Output connection from node ${node.id} references valid node ${conn.node}`);
+                                    });
+                                });
+                            });
+                        }
+                    },
+                    {
+                        name: "Connections are bidirectional (A->B implies B has input from A)",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            
+                            // For each output connection, verify the target has corresponding input
+                            Object.values(rete.nodes).forEach(node => {
+                                Object.entries(node.outputs || {}).forEach(([socketName, socket]) => {
+                                    (socket.connections || []).forEach(conn => {
+                                        const targetNode = rete.nodes[conn.node];
+                                        const inputSocket = conn.input;
+                                        
+                                        // Target should have input from this node
+                                        assertTrue(targetNode.inputs[inputSocket], 
+                                            `Target node ${conn.node} should have input socket '${inputSocket}'`);
+                                        
+                                        const hasBackRef = targetNode.inputs[inputSocket].connections.some(
+                                            c => c.node === node.id
+                                        );
+                                        assertTrue(hasBackRef,
+                                            `Target node ${conn.node} input '${inputSocket}' should reference source node ${node.id}`);
+                                    });
+                                });
+                            });
+                        }
+                    }
+                ]
             }
         ];
         
@@ -769,8 +1162,12 @@
             if (typeof Module !== 'undefined' && Module.cwrap) {
                 try {
                     miniscript_to_json = Module.cwrap('miniscript_to_json', 'string', ['string']);
-                    log("✅ WASM module initialized, miniscript_to_json ready");
+                    miniscript_to_rete_json = Module.cwrap('miniscript_to_rete_json', 'string', ['string']);
+                    miniscript_to_complete_rete_json = Module.cwrap('miniscript_to_complete_rete_json', 'string', ['string']);
+                    log("✅ WASM module initialized, all functions ready");
                     console.log("miniscript_to_json function:", miniscript_to_json);
+                    console.log("miniscript_to_rete_json function:", miniscript_to_rete_json);
+                    console.log("miniscript_to_complete_rete_json function:", miniscript_to_complete_rete_json);
                     runAllTests();
                 } catch (e) {
                     log("❌ Failed to initialize: " + e.message);
