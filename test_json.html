@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Miniscript JSON/AST Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background: #fafafa; }
+        pre { background: #f4f4f4; padding: 10px; overflow: auto; border-radius: 4px; }
+        .test { margin-bottom: 20px; border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: white; }
+        .success { border-left: 4px solid green; }
+        .error { border-left: 4px solid red; }
+        h3 { margin-top: 0; }
+        
+        .custom-test-section {
+            background: white;
+            border: 2px solid #007bff;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+        }
+        
+        .custom-test-section h2 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .input-group textarea,
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+            box-sizing: border-box;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .custom-result {
+            margin-top: 15px;
+        }
+        
+        .console-log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+        
+        .log-info { color: #4ec9b0; }
+        .log-error { color: #f48771; }
+        .log-success { color: #6a9955; }
+    </style>
+</head>
+<body>
+    <h1>Miniscript JSON/AST Test</h1>
+    <p>This page tests the new <code>miniscript_to_json</code> function.</p>
+    
+    <div class="custom-test-section">
+        <h2>🧪 Custom Test Input</h2>
+        <p>Enter any miniscript expression to test and debug:</p>
+        
+        <div class="input-group">
+            <label for="customInput">Miniscript Expression:</label>
+            <textarea id="customInput" rows="3" placeholder="e.g., or_i(pk(A),pk(B))" spellcheck="false"></textarea>
+        </div>
+        
+        <div class="button-group">
+            <button onclick="testCustomInput()">Test Expression</button>
+            <button onclick="clearCustomInput()">Clear</button>
+        </div>
+        
+        <div id="customResult" class="custom-result"></div>
+        
+        <div id="consoleLogs" class="console-log" style="display:none;"></div>
+    </div>
+    
+    <div id="results">Loading WASM module...</div>
+
+    <script src="miniscript.js"></script>
+    <script>
+        let miniscript_to_json;
+        let consoleLogs = [];
+        
+        // Intercept console.log for custom tests
+        const originalLog = console.log;
+        const customConsole = function(...args) {
+            originalLog.apply(console, args);
+            consoleLogs.push(args.map(arg => {
+                if (typeof arg === 'object') {
+                    return JSON.stringify(arg, null, 2);
+                }
+                return String(arg);
+            }).join(' '));
+            updateConsoleLogs();
+        };
+        
+        function updateConsoleLogs() {
+            const logsDiv = document.getElementById('consoleLogs');
+            if (consoleLogs.length > 0) {
+                logsDiv.style.display = 'block';
+                logsDiv.innerHTML = consoleLogs.map((log, i) => 
+                    `<div class="log-entry log-info">${escapeHtml(log)}</div>`
+                ).join('');
+            }
+        }
+        
+        function clearConsoleLogs() {
+            consoleLogs = [];
+            document.getElementById('consoleLogs').style.display = 'none';
+        }
+        
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        function testCustomInput() {
+            clearConsoleLogs();
+            const input = document.getElementById('customInput').value.trim();
+            
+            if (!input) {
+                document.getElementById('customResult').innerHTML = 
+                    '<p style="color: red;">Please enter a miniscript expression.</p>';
+                return;
+            }
+            
+            document.getElementById('customResult').innerHTML = '<p>Testing...</p>';
+            
+            setTimeout(() => {
+                try {
+                    const jsonStr = miniscript_to_json(input);
+                    const parsed = JSON.parse(jsonStr);
+                    
+                    // Log to custom console
+                    customConsole("Input:", input);
+                    customConsole("Valid:", parsed.valid);
+                    customConsole("Full AST:", parsed);
+                    
+                    let html = `
+                        <h3>Result for: <code>${escapeHtml(input)}</code></h3>
+                        <p><strong>Valid:</strong> <span style="color: ${parsed.valid ? 'green' : 'red'}">${parsed.valid}</span></p>
+                    `;
+                    
+                    if (parsed.error) {
+                        html += `<p><strong>Error:</strong> ${escapeHtml(parsed.error)}</p>`;
+                    }
+                    
+                    if (parsed.is_valid_top_level !== undefined) {
+                        html += `<p><strong>Valid Top Level:</strong> ${parsed.is_valid_top_level}</p>`;
+                    }
+                    
+                    if (parsed.is_sane !== undefined) {
+                        html += `<p><strong>Is Sane:</strong> ${parsed.is_sane}</p>`;
+                    }
+                    
+                    if (parsed.root) {
+                        html += `
+                            <p><strong>Root Fragment:</strong> ${escapeHtml(parsed.root.fragment)}</p>
+                            <details>
+                                <summary>Full JSON Output</summary>
+                                <pre>${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>
+                            </details>
+                        `;
+                    }
+                    
+                    document.getElementById('customResult').innerHTML = html;
+                    
+                } catch (e) {
+                    customConsole("Error:", e.message);
+                    document.getElementById('customResult').innerHTML = `
+                        <p style="color: red;"><strong>Error:</strong> ${escapeHtml(e.message)}</p>
+                        <details>
+                            <summary>Stack trace</summary>
+                            <pre>${escapeHtml(e.stack)}</pre>
+                        </details>
+                    `;
+                }
+            }, 0);
+        }
+        
+        function clearCustomInput() {
+            document.getElementById('customInput').value = '';
+            document.getElementById('customResult').innerHTML = '';
+            clearConsoleLogs();
+        }
+        
+        // Allow Enter key in textarea to submit (Ctrl+Enter)
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('customInput').addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    testCustomInput();
+                }
+            });
+        });
+        
+        // Wait for the WASM module to be ready
+        Module.onRuntimeInitialized = function() {
+            // Create the wrapped function
+            miniscript_to_json = Module.cwrap('miniscript_to_json', 'string', ['string']);
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            // Test cases
+            const testCases = [
+                {
+                    name: "Simple pk()",
+                    input: "pk(A)",
+                    description: "A simple public key check"
+                },
+                {
+                    name: "or_i with two keys",
+                    input: "or_i(pk(A),pk(B))",
+                    description: "Either key A or key B can spend"
+                },
+                {
+                    name: "and_v with timelock",
+                    input: "and_v(pk(A),after(100))",
+                    description: "Key A AND after block 100"
+                },
+                {
+                    name: "Complex nested expression",
+                    input: "or_i(and_v(pk(A),older(1000)),pk(B))",
+                    description: "Either (A with 1000 block delay) or B"
+                },
+                {
+                    name: "Multi-signature",
+                    input: "multi(2,A,B,C)",
+                    description: "2-of-3 multisig"
+                },
+                {
+                    name: "Hash preimage",
+                    input: "sha256(0000000000000000000000000000000000000000000000000000000000000000)",
+                    description: "SHA256 hash preimage check"
+                },
+                {
+                    name: "Threshold",
+                    input: "thresh(2,pk(A),pk(B),pk(C))",
+                    description: "2-of-3 threshold of public keys"
+                },
+                {
+                    name: "Invalid expression",
+                    input: "invalid_fragment(A)",
+                    description: "Should return an error"
+                }
+            ];
+
+            // Run each test
+            testCases.forEach((test, index) => {
+                const testDiv = document.createElement('div');
+                testDiv.className = 'test';
+
+                try {
+                    const jsonStr = miniscript_to_json(test.input);
+                    const parsed = JSON.parse(jsonStr);
+
+                    testDiv.innerHTML = `
+                        <h3>Test ${index + 1}: ${test.name}</h3>
+                        <p><strong>Input:</strong> <code>${escapeHtml(test.input)}</code></p>
+                        <p><strong>Description:</strong> ${test.description}</p>
+                        <p><strong>Valid:</strong> <span style="color: ${parsed.valid ? 'green' : 'red'}">${parsed.valid}</span></p>
+                        ${parsed.error ? `<p><strong>Error:</strong> ${escapeHtml(parsed.error)}</p>` : ''}
+                        ${parsed.root ? `<p><strong>Root Fragment:</strong> ${escapeHtml(parsed.root.fragment)}</p>` : ''}
+                        <details>
+                            <summary>Full JSON Output</summary>
+                            <pre>${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>
+                        </details>
+                    `;
+
+                    testDiv.classList.add(parsed.valid ? 'success' : 'error');
+                } catch (e) {
+                    testDiv.innerHTML = `
+                        <h3>Test ${index + 1}: ${test.name}</h3>
+                        <p><strong>Input:</strong> <code>${escapeHtml(test.input)}</code></p>
+                        <p><strong>Error:</strong> ${escapeHtml(e.message)}</p>
+                    `;
+                    testDiv.classList.add('error');
+                }
+
+                resultsDiv.appendChild(testDiv);
+            });
+
+            // Add a summary
+            const summary = document.createElement('div');
+            summary.innerHTML = `
+                <h2>Summary</h2>
+                <p>All tests completed. Check the browser console for the automatic smoke test output.</p>
+                <p>To use the function in your own code:</p>
+                <pre>
+// Using cwrap (recommended)
+const miniscript_to_json = Module.cwrap('miniscript_to_json', 'string', ['string']);
+const jsonStr = miniscript_to_json("and_v(pk(A),after(100))");
+const ast = JSON.parse(jsonStr);
+console.log(ast);
+                </pre>
+            `;
+            resultsDiv.appendChild(summary);
+        };
+    </script>
+</body>
+</html>

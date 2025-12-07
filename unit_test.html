@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Miniscript JSON/AST Unit Tests</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .header p {
+            margin: 5px 0;
+            color: #666;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+        }
+        
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .stat.passed .stat-value { color: #28a745; }
+        .stat.failed .stat-value { color: #dc3545; }
+        .stat.total .stat-value { color: #007bff; }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 15px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            transition: width 0.3s ease;
+        }
+        
+        .test-suite {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-suite h2 {
+            margin: 0 0 15px 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        
+        .test-case {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #ddd;
+            border-radius: 2px;
+            background: #fafafa;
+        }
+        
+        .test-case.passed {
+            border-left-color: #28a745;
+            background: #f0f9f6;
+        }
+        
+        .test-case.failed {
+            border-left-color: #dc3545;
+            background: #fdf7f7;
+        }
+        
+        .test-case.skipped {
+            border-left-color: #ffc107;
+            background: #fffbf0;
+        }
+        
+        .test-title {
+            font-weight: bold;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .test-icon {
+            font-size: 18px;
+        }
+        
+        .passed .test-icon { color: #28a745; }
+        .failed .test-icon { color: #dc3545; }
+        .skipped .test-icon { color: #ffc107; }
+        
+        .test-details {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #666;
+            font-family: monospace;
+        }
+        
+        .test-error {
+            color: #dc3545;
+            background: #fff5f5;
+            padding: 8px;
+            border-radius: 2px;
+            margin-top: 8px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .test-assertion {
+            margin-top: 5px;
+            padding: 5px;
+            background: white;
+            border-left: 3px solid #007bff;
+            padding-left: 10px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .footer {
+            text-align: center;
+            color: #666;
+            margin-top: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 4px;
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧪 Miniscript JSON/AST Unit Tests</h1>
+        <p>Comprehensive test suite for the miniscript_to_json function</p>
+        
+        <div class="stats" id="stats">
+            <div class="stat total">
+                <span>Total:</span>
+                <div class="stat-value" id="totalTests">0</div>
+            </div>
+            <div class="stat passed">
+                <span>Passed:</span>
+                <div class="stat-value" id="passedTests">0</div>
+            </div>
+            <div class="stat failed">
+                <span>Failed:</span>
+                <div class="stat-value" id="failedTests">0</div>
+            </div>
+            <div class="stat">
+                <span>Success Rate:</span>
+                <div class="stat-value" id="successRate">0%</div>
+            </div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width: 0%;">0%</div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button onclick="runAllTests()">▶ Run All Tests</button>
+        <button onclick="clearResults()">🔄 Clear Results</button>
+        <button onclick="toggleFailedOnly()">📊 Show Failed Only</button>
+    </div>
+    
+    <div id="testContainer"></div>
+    
+    <div class="footer">
+        <p>Tests will run automatically when the WASM module is loaded...</p>
+    </div>
+
+    <script src="miniscript.js"></script>
+    <script>
+        let miniscript_to_json;
+        let testResults = [];
+        let allTests = [];
+        let showFailedOnly = false;
+        
+        // Log to console helper
+        function log(message, data) {
+            const msg = data ? `${message}: ${JSON.stringify(data)}` : message;
+            console.log(msg);
+        }
+        
+        // Assertion helpers
+        class TestAssertion {
+            constructor(condition, message) {
+                this.condition = condition;
+                this.message = message;
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+        }
+        
+        function assertEqual(actual, expected, message) {
+            if (actual !== expected) {
+                throw new Error(`${message}\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(actual)}`);
+            }
+        }
+        
+        function assertTrue(value, message) {
+            if (value !== true) {
+                throw new Error(`${message}\nExpected: true\nActual: ${JSON.stringify(value)}`);
+            }
+        }
+        
+        function assertFalse(value, message) {
+            if (value !== false) {
+                throw new Error(`${message}\nExpected: false\nActual: ${JSON.stringify(value)}`);
+            }
+        }
+        
+        function assertExists(value, message) {
+            if (!value) {
+                throw new Error(`${message}\nValue is null or undefined`);
+            }
+        }
+        
+        function assertJsonValid(jsonStr, message) {
+            try {
+                JSON.parse(jsonStr);
+            } catch (e) {
+                throw new Error(`${message}\nInvalid JSON: ${e.message}`);
+            }
+        }
+        
+        // Test definition
+        const testSuites = [
+            {
+                name: "Basic Fragment Tests",
+                tests: [
+                    {
+                        name: "Parse simple pk(A)",
+                        run: () => {
+                            const result = miniscript_to_json("pk(A)");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "pk(A) should parse successfully");
+                            assertEqual(ast.root.fragment, "c", "Root should be wrapper 'c' (WRAP_C)");
+                            assertExists(ast.root.children, "Should have children");
+                            assertEqual(ast.root.children[0].fragment, "pk_k", "Child should be pk_k");
+                            assertEqual(ast.root.children[0].args[0], "A", "Should have key A as argument");
+                        }
+                    },
+                    {
+                        name: "Parse or_i(pk(A),pk(B))",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "or_i(pk(A),pk(B)) should be valid");
+                            assertTrue(ast.is_valid_top_level, "Should be valid at top level");
+                            assertTrue(ast.is_sane, "Should be sane");
+                            assertEqual(ast.root.fragment, "or_i", "Root should be or_i");
+                            assertEqual(ast.root.children.length, 2, "Should have 2 children");
+                        }
+                    },
+                    {
+                        name: "Parse multi(2,A,B,C)",
+                        run: () => {
+                            const result = miniscript_to_json("multi(2,A,B,C)");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "multi(2,A,B,C) should be valid");
+                            assertEqual(ast.root.fragment, "multi", "Root should be multi");
+                            assertTrue(ast.root.args.length >= 3, "Should have at least 3 args");
+                            assertTrue(ast.root.args.includes("A"), "Should include key A");
+                            assertTrue(ast.root.args.includes("B"), "Should include key B");
+                            assertTrue(ast.root.args.includes("C"), "Should include key C");
+                        }
+                    },
+                    {
+                        name: "Parse sha256(hash)",
+                        run: () => {
+                            const hash = "0000000000000000000000000000000000000000000000000000000000000000";
+                            const result = miniscript_to_json(`sha256(${hash})`);
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "sha256 should be valid");
+                            assertEqual(ast.root.fragment, "sha256", "Root should be sha256");
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Type and Properties Tests",
+                tests: [
+                    {
+                        name: "Check type system for or_i(pk(A),pk(B))",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            assertEqual(ast.root.props.type, "B", "Type should be B (Base)");
+                            assertExists(ast.root.props.modifiers, "Should have modifiers");
+                            assertTrue(Array.isArray(ast.root.props.modifiers), "Modifiers should be array");
+                        }
+                    },
+                    {
+                        name: "Check script properties",
+                        run: () => {
+                            const result = miniscript_to_json("pk(A)");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.root.props.script_size > 0, "Script size should be positive");
+                            assertTrue(ast.root.props.max_ops >= 0, "Max ops should be non-negative");
+                            assertTrue(ast.root.props.max_stack_size > 0, "Max stack size should be positive");
+                        }
+                    },
+                    {
+                        name: "Check validity flags",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.root.props.is_valid, "Should be valid");
+                            assertTrue(ast.root.props.is_nonmalleable, "Should be non-malleable");
+                            assertTrue(ast.root.props.needs_signature, "Should need signature");
+                            assertTrue(ast.root.props.timelock_mix_ok, "Should have OK timelock mix");
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Tree Structure Tests",
+                tests: [
+                    {
+                        name: "Check nested tree for or_i",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            assertEqual(ast.root.children.length, 2, "Root should have 2 children");
+                            assertTrue(ast.root.children.every(c => c.id && c.fragment), "All children should have id and fragment");
+                        }
+                    },
+                    {
+                        name: "Check node IDs are unique",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            const ids = new Set();
+                            function collectIds(node) {
+                                ids.add(node.id);
+                                if (node.children && node.children.length > 0) {
+                                    node.children.forEach(collectIds);
+                                }
+                            }
+                            collectIds(ast.root);
+                            assertTrue(ids.size > 1, "Should have multiple unique node IDs");
+                        }
+                    },
+                    {
+                        name: "Check leaf nodes have empty children",
+                        run: () => {
+                            const result = miniscript_to_json("pk(A)");
+                            const ast = JSON.parse(result);
+                            function checkLeaves(node) {
+                                if (node.fragment === "pk_k" || node.fragment === "pk_h") {
+                                    assertEqual(node.children.length, 0, `${node.fragment} should be leaf`);
+                                }
+                                node.children.forEach(checkLeaves);
+                            }
+                            checkLeaves(ast.root);
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Error Handling Tests",
+                tests: [
+                    {
+                        name: "Handle invalid fragment",
+                        run: () => {
+                            const result = miniscript_to_json("invalid_fragment(A)");
+                            const ast = JSON.parse(result);
+                            assertFalse(ast.valid, "Should be invalid");
+                            assertExists(ast.error, "Should have error message");
+                            assertTrue(ast.error.includes("parse"), "Error should mention parsing");
+                        }
+                    },
+                    {
+                        name: "Handle malformed input",
+                        run: () => {
+                            const result = miniscript_to_json("pk(A))");
+                            const ast = JSON.parse(result);
+                            assertFalse(ast.valid, "Should be invalid");
+                        }
+                    },
+                    {
+                        name: "Handle empty input",
+                        run: () => {
+                            const result = miniscript_to_json("");
+                            const ast = JSON.parse(result);
+                            assertFalse(ast.valid, "Should be invalid for empty string");
+                        }
+                    }
+                ]
+            },
+            {
+                name: "JSON Format Tests",
+                tests: [
+                    {
+                        name: "Output is valid JSON",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            assertJsonValid(result, "Output should be valid JSON");
+                        }
+                    },
+                    {
+                        name: "Root object has required fields",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            assertExists(ast.miniscript, "Should have miniscript field");
+                            assertExists(ast.valid, "Should have valid field");
+                            assertExists(ast.root, "Valid AST should have root");
+                        }
+                    },
+                    {
+                        name: "Root node has required fields",
+                        run: () => {
+                            const result = miniscript_to_json("pk(A)");
+                            const ast = JSON.parse(result);
+                            assertExists(ast.root.id, "Root should have id");
+                            assertExists(ast.root.fragment, "Root should have fragment");
+                            assertExists(ast.root.miniscript, "Root should have miniscript");
+                            assertExists(ast.root.props, "Root should have props");
+                            assertExists(ast.root.children, "Root should have children");
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Original HTML Examples",
+                tests: [
+                    {
+                        name: "Simple pk() from test cases",
+                        run: () => {
+                            const result = miniscript_to_json("pk(A)");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "pk(A) should parse successfully");
+                            assertEqual(ast.root.fragment, "c", "Root should be wrapper 'c'");
+                        }
+                    },
+                    {
+                        name: "or_i with two keys",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "or_i(pk(A),pk(B)) should be valid");
+                            assertTrue(ast.is_valid_top_level, "Should be valid at top level");
+                            assertEqual(ast.root.fragment, "or_i", "Root should be or_i");
+                        }
+                    },
+                    {
+                        name: "Multi-signature 2-of-3",
+                        run: () => {
+                            const result = miniscript_to_json("multi(2,A,B,C)");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "multi(2,A,B,C) should be valid");
+                            assertEqual(ast.root.fragment, "multi", "Root should be multi");
+                        }
+                    },
+                    {
+                        name: "SHA256 hash preimage",
+                        run: () => {
+                            const hash = "0000000000000000000000000000000000000000000000000000000000000000";
+                            const result = miniscript_to_json(`sha256(${hash})`);
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "sha256 should be valid");
+                            assertEqual(ast.root.fragment, "sha256", "Root should be sha256");
+                        }
+                    },
+                    {
+                        name: "older() timelock",
+                        run: () => {
+                            const result = miniscript_to_json("older(100)");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "older(100) should parse");
+                            assertEqual(ast.root.fragment, "older", "Root should be older");
+                        }
+                    },
+                    {
+                        name: "and_n() boolean AND",
+                        run: () => {
+                            const result = miniscript_to_json("and_n(pk(A),pk(B))");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "and_n should parse");
+                            // Note: and_n is internally represented as "andor" in miniscript
+                            assertEqual(ast.root.fragment, "andor", "Root should be andor (internal representation)");
+                        }
+                    },
+                    {
+                        name: "hash256() hash preimage",
+                        run: () => {
+                            const hash = "0000000000000000000000000000000000000000000000000000000000000000";
+                            const result = miniscript_to_json(`hash256(${hash})`);
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "hash256 should parse");
+                            assertEqual(ast.root.fragment, "hash256", "Root should be hash256");
+                        }
+                    },
+                    {
+                        name: "Complex nested expression",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(and_n(pk(A),pk(B)),pk(C))");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "nested expression should parse");
+                            assertEqual(ast.root.fragment, "or_i", "Root should be or_i");
+                            assertEqual(ast.root.children.length, 2, "Should have 2 children");
+                        }
+                    },
+                    {
+                        name: "Invalid expression handling",
+                        run: () => {
+                            const result = miniscript_to_json("invalid_fragment(A)");
+                            const ast = JSON.parse(result);
+                            assertFalse(ast.valid, "Should be invalid");
+                            assertExists(ast.error, "Should have error message");
+                        }
+                    },
+                    {
+                        name: "Empty string handling",
+                        run: () => {
+                            const result = miniscript_to_json("");
+                            const ast = JSON.parse(result);
+                            assertFalse(ast.valid, "Empty string should be invalid");
+                        }
+                    },
+                    {
+                        name: "Malformed expression",
+                        run: () => {
+                            const result = miniscript_to_json("pk(A))");
+                            const ast = JSON.parse(result);
+                            assertFalse(ast.valid, "Malformed expression should be invalid");
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Advanced Miniscript Features",
+                tests: [
+                    {
+                        name: "hash256 with different hash",
+                        run: () => {
+                            const hash = "1111111111111111111111111111111111111111111111111111111111111111";
+                            const result = miniscript_to_json(`hash256(${hash})`);
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "hash256 with different hash should parse");
+                            assertEqual(ast.root.fragment, "hash256", "Root should be hash256");
+                        }
+                    },
+                    {
+                        name: "sha256 with different hash",
+                        run: () => {
+                            const hash = "1111111111111111111111111111111111111111111111111111111111111111";
+                            const result = miniscript_to_json(`sha256(${hash})`);
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "sha256 with different hash should parse");
+                            assertEqual(ast.root.fragment, "sha256", "Root should be sha256");
+                        }
+                    },
+                    {
+                        name: "Deeply nested expression",
+                        run: () => {
+                            const result = miniscript_to_json("or_i(and_n(pk(A),or_i(pk(B),pk(C))),pk(D))");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "Deeply nested expression should parse");
+                            assertEqual(ast.root.fragment, "or_i", "Root should be or_i");
+                        }
+                    },
+                    {
+                        name: "Single timelock with large value",
+                        run: () => {
+                            const result = miniscript_to_json("older(12960)");
+                            const ast = JSON.parse(result);
+                            assertTrue(ast.valid, "older(12960) should parse");
+                            assertEqual(ast.root.fragment, "older", "Root should be older");
+                        }
+                    }
+                ]
+            }
+        ];
+        
+        function runAllTests() {
+            log("🧪 Starting unit tests...");
+            testResults = [];
+            let passed = 0;
+            let failed = 0;
+            
+            testSuites.forEach(suite => {
+                log(`📦 Running test suite: ${suite.name}`);
+                suite.tests.forEach(test => {
+                    try {
+                        test.run();
+                        testResults.push({
+                            suite: suite.name,
+                            name: test.name,
+                            passed: true,
+                            error: null
+                        });
+                        log(`  ✓ ${test.name}`);
+                        passed++;
+                    } catch (e) {
+                        testResults.push({
+                            suite: suite.name,
+                            name: test.name,
+                            passed: false,
+                            error: e.message
+                        });
+                        log(`  ✗ ${test.name}: ${e.message}`);
+                        failed++;
+                    }
+                });
+            });
+            
+            log(`\n✅ Test Results: ${passed} passed, ${failed} failed out of ${testResults.length} total`);
+            renderResults();
+        }
+        
+        function renderResults() {
+            const container = document.getElementById('testContainer');
+            container.innerHTML = '';
+            
+            const suitesMap = {};
+            testResults.forEach(result => {
+                if (!suitesMap[result.suite]) {
+                    suitesMap[result.suite] = [];
+                }
+                suitesMap[result.suite].push(result);
+            });
+            
+            Object.keys(suitesMap).forEach(suiteName => {
+                const suiteDiv = document.createElement('div');
+                suiteDiv.className = 'test-suite';
+                suiteDiv.innerHTML = `<h2>${suiteName}</h2>`;
+                
+                suitesMap[suiteName].forEach(result => {
+                    const testDiv = document.createElement('div');
+                    testDiv.className = `test-case ${result.passed ? 'passed' : 'failed'}`;
+                    
+                    if (showFailedOnly && result.passed) {
+                        testDiv.classList.add('hidden');
+                    }
+                    
+                    testDiv.innerHTML = `
+                        <div class="test-title">
+                            <span class="test-icon">${result.passed ? '✓' : '✗'}</span>
+                            ${result.name}
+                        </div>
+                        ${result.error ? `<div class="test-error"><strong>Error:</strong><br>${escapeHtml(result.error)}</div>` : ''}
+                    `;
+                    
+                    suiteDiv.appendChild(testDiv);
+                });
+                
+                container.appendChild(suiteDiv);
+            });
+            
+            updateStats();
+        }
+        
+        function updateStats() {
+            const total = testResults.length;
+            const passed = testResults.filter(r => r.passed).length;
+            const failed = total - passed;
+            const rate = total > 0 ? Math.round((passed / total) * 100) : 0;
+            
+            document.getElementById('totalTests').textContent = total;
+            document.getElementById('passedTests').textContent = passed;
+            document.getElementById('failedTests').textContent = failed;
+            document.getElementById('successRate').textContent = rate + '%';
+            
+            const fill = document.getElementById('progressFill');
+            fill.style.width = rate + '%';
+            fill.textContent = rate + '%';
+            
+            if (rate === 100) {
+                fill.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
+            } else if (rate >= 50) {
+                fill.style.background = 'linear-gradient(90deg, #ffc107, #ff9800)';
+            } else {
+                fill.style.background = 'linear-gradient(90deg, #dc3545, #c82333)';
+            }
+        }
+        
+        function clearResults() {
+            testResults = [];
+            document.getElementById('testContainer').innerHTML = '';
+            updateStats();
+        }
+        
+        function toggleFailedOnly() {
+            showFailedOnly = !showFailedOnly;
+            renderResults();
+        }
+        
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // Auto-run tests when WASM is ready
+        function initializeTests() {
+            if (typeof Module !== 'undefined' && Module.cwrap) {
+                try {
+                    miniscript_to_json = Module.cwrap('miniscript_to_json', 'string', ['string']);
+                    log("✅ WASM module initialized, miniscript_to_json ready");
+                    console.log("miniscript_to_json function:", miniscript_to_json);
+                    runAllTests();
+                } catch (e) {
+                    log("❌ Failed to initialize: " + e.message);
+                    setTimeout(initializeTests, 100);
+                }
+            } else {
+                log("⏳ Waiting for WASM module...");
+                setTimeout(initializeTests, 100);
+            }
+        }
+        
+        // Start initialization immediately
+        log("🚀 Page loaded, initializing...");
+        initializeTests();
+        
+        // Also handle the Module.onRuntimeInitialized callback if it exists
+        if (typeof Module !== 'undefined') {
+            const originalInit = Module.onRuntimeInitialized;
+            Module.onRuntimeInitialized = function() {
+                if (originalInit) originalInit();
+                log("Module.onRuntimeInitialized called");
+                initializeTests();
+            };
+        }
+    </script>
+</body>
+</html>

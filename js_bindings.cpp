@@ -1,8 +1,10 @@
 #include <string>
+#include <cstring>
 
 #include <script/miniscript.h>
 
 #include "compiler.h"
+#include "miniscript_json.h"
 
 namespace {
 
@@ -128,4 +130,37 @@ void miniscript_analyze(const char* ms, char* costout, int costoutlen, char* asm
     }
 }
 
+/**
+ * Convert a miniscript expression to a JSON AST representation.
+ * 
+ * This function parses the input miniscript string and returns a JSON string
+ * containing the abstract syntax tree (AST) of the expression.
+ * 
+ * Usage from JavaScript:
+ *   // Using cwrap (recommended):
+ *   const miniscript_to_json = Module.cwrap('miniscript_to_json', 'string', ['string']);
+ *   const jsonStr = miniscript_to_json("and_v(pk(A),after(100))");
+ *   const ast = JSON.parse(jsonStr);
+ *   console.log(ast);
+ *   
+ *   // Or using direct call (requires manual memory management):
+ *   const ptr = Module._miniscript_to_json(strPtr);
+ *   const jsonStr = Module.UTF8ToString(ptr);
+ *   Module._free(ptr);
+ * 
+ * @param ms The miniscript expression to parse
+ * @return A pointer to a null-terminated JSON string (caller must free with Module._free)
+ */
+const char* miniscript_to_json(const char* ms) {
+    std::string result = MiniscriptToJson(std::string(ms));
+    
+    // Allocate memory for the result string that can be freed by the caller
+    char* output = static_cast<char*>(malloc(result.size() + 1));
+    if (output) {
+        std::memcpy(output, result.c_str(), result.size() + 1);
+    }
+    return output;
 }
+
+}
+

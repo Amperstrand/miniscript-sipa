@@ -33,6 +33,44 @@ function htmlEscape(str) {
 em_miniscript_compile = Module.cwrap('miniscript_compile', 'none', ['string', 'number', 'number', 'number', 'number', 'number', 'number']);
 em_miniscript_analyze = Module.cwrap('miniscript_analyze', 'none', ['string', 'number', 'number', 'number', 'number']);
 
+/**
+ * New: miniscript_to_json - Convert a miniscript to JSON/AST representation.
+ * 
+ * Usage example (uncomment to test in browser console):
+ * 
+ *   const jsonStr = em_miniscript_to_json("and_v(pk(A),after(100))");
+ *   const ast = JSON.parse(jsonStr);
+ *   console.log("Miniscript AST:", ast);
+ *   console.log("Root fragment:", ast.root.fragment);
+ *   console.log("Is valid:", ast.valid);
+ * 
+ * More complex example:
+ * 
+ *   const complex = em_miniscript_to_json("or_i(and_v(pk(A),older(1000)),pk(B))");
+ *   console.log(JSON.stringify(JSON.parse(complex), null, 2));
+ */
+em_miniscript_to_json = Module.cwrap('miniscript_to_json', 'string', ['string']);
+
+// Smoke test: log a sample JSON AST to console when the page loads
+// (This runs after the WASM module is ready)
+if (typeof console !== 'undefined') {
+    Module.onRuntimeInitialized = function() {
+        console.log("=== Miniscript JSON/AST Demo ===");
+        console.log("Testing em_miniscript_to_json with: or_i(pk(A),pk(B))");
+        try {
+            var testJson = em_miniscript_to_json("or_i(pk(A),pk(B))");
+            var parsed = JSON.parse(testJson);
+            console.log("Result:", parsed);
+            console.log("Valid:", parsed.valid);
+            console.log("Root fragment:", parsed.root ? parsed.root.fragment : "N/A");
+            console.log("Full JSON:", testJson);
+        } catch (e) {
+            console.log("Error during JSON test:", e);
+        }
+        console.log("=================================");
+    };
+}
+
 
 function miniscript_compile() {
     document.getElementById("out").innerHTML = "Compiling...";
@@ -42,12 +80,36 @@ function miniscript_compile() {
         var costout = Module._malloc(500);
         var asmout = Module._malloc(100000);
         em_miniscript_compile(src, msout, 10000, costout, 500, asmout, 100000);
-        document.getElementById("analyze_ms").value = Module.UTF8ToString(msout);
+        
+        var miniscriptStr = Module.UTF8ToString(msout);
+        document.getElementById("analyze_ms").value = miniscriptStr;
         document.getElementById("analyze_out").innerHTML = "";
+        
+        // Generate JSON/AST for the compiled miniscript
+        var jsonOutput = "";
+        var jsonData = null;
+        if (miniscriptStr && !miniscriptStr.includes("[compile error]") && !miniscriptStr.includes("[exception")) {
+            try {
+                var jsonStr = em_miniscript_to_json(miniscriptStr);
+                jsonData = JSON.parse(jsonStr);
+                console.log("Compile - JSON AST:", jsonData);
+                
+                if (jsonData.valid) {
+                    jsonOutput = "<p><b>JSON/AST Representation:</b><details><summary>Click to expand</summary>" +
+                        "<pre style='background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto;'>" + 
+                        htmlEscape(JSON.stringify(jsonData, null, 2)) + 
+                        "</pre></details>";
+                }
+            } catch (e) {
+                console.log("Error generating JSON:", e);
+            }
+        }
+        
         document.getElementById("out").innerHTML =
-            "<p><p><b>Miniscript output:</b><p><code>" + htmlEscape(Module.UTF8ToString(msout)) + "</code>" +
+            "<p><p><b>Miniscript output:</b><p><code>" + htmlEscape(miniscriptStr) + "</code>" +
             "<p><b>Spending cost analysis</b><p>" + Module.UTF8ToString(costout) + "" +
-            "<p><b>Resulting script structure</b><p><samp><pre>" + htmlEscape(Module.UTF8ToString(asmout)) + "</pre></samp>";
+            "<p><b>Resulting script structure</b><p><samp><pre>" + htmlEscape(Module.UTF8ToString(asmout)) + "</pre></samp>" +
+            jsonOutput;
         Module._free(msout)
         Module._free(costout)
         Module._free(asmout)
@@ -66,9 +128,33 @@ function miniscript_analyze() {
         var analyze_out = Module._malloc(50000);
         var asmout = Module._malloc(100000);
         em_miniscript_analyze(src, analyze_out, 50000, asmout, 100000);
+        
+        var analysisStr = Module.UTF8ToString(analyze_out);
+        
+        // Generate JSON/AST for the analyzed miniscript
+        var jsonOutput = "";
+        var jsonData = null;
+        if (src && !analysisStr.includes("[analysis error]") && !analysisStr.includes("[exception")) {
+            try {
+                var jsonStr = em_miniscript_to_json(src);
+                jsonData = JSON.parse(jsonStr);
+                console.log("Analyze - JSON AST:", jsonData);
+                
+                if (jsonData.valid) {
+                    jsonOutput = "<p><b>JSON/AST Representation:</b><details><summary>Click to expand</summary>" +
+                        "<pre style='background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto;'>" + 
+                        htmlEscape(JSON.stringify(jsonData, null, 2)) + 
+                        "</pre></details>";
+                }
+            } catch (e) {
+                console.log("Error generating JSON:", e);
+            }
+        }
+        
         document.getElementById("analyze_out").innerHTML =
-            "<p><p><b>Analysis</b><p>" + Module.UTF8ToString(analyze_out) + "<p><small>Hover over the tree elements for more details</small>" +
-            "<p><b>Resulting script structure</b><p><samp><pre>" + htmlEscape(Module.UTF8ToString(asmout)) + "</pre></samp>";
+            "<p><p><b>Analysis</b><p>" + analysisStr + "<p><small>Hover over the tree elements for more details</small>" +
+            "<p><b>Resulting script structure</b><p><samp><pre>" + htmlEscape(Module.UTF8ToString(asmout)) + "</pre></samp>" +
+            jsonOutput;
         Module._free(analyze_out)
         Module._free(asmout)
     });
