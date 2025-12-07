@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Miniscript Visualizer & Simulator</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css" integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ" crossorigin="anonymous">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+        
+        .header p {
+            margin: 5px 0 0 0;
+            opacity: 0.9;
+        }
+        
+        .input-section {
+            background: white;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .input-section label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .input-section textarea {
+            width: 100%;
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        
+        .input-section .miniscript-input {
+            min-height: 60px;
+        }
+        
+        .input-section .config-input {
+            min-height: 100px;
+            font-size: 12px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 10px 30px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 4px;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        
+        .main-container {
+            display: flex;
+            margin: 0 20px 20px 20px;
+            gap: 20px;
+            min-height: 500px;
+        }
+        
+        .tree-panel {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tree-panel-header {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+        }
+        
+        .tree-content {
+            padding: 15px;
+            overflow: auto;
+            flex: 1;
+        }
+        
+        .details-panel {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            font-weight: 600;
+            color: #666;
+        }
+        
+        .tab:hover {
+            background: #eee;
+        }
+        
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+        }
+        
+        .tab-content {
+            padding: 20px;
+            flex: 1;
+            overflow: auto;
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Tree node styling */
+        .tree-node {
+            margin: 5px 0;
+            padding-left: 20px;
+            border-left: 2px solid #eee;
+        }
+        
+        .tree-node-row {
+            display: flex;
+            align-items: center;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            gap: 8px;
+        }
+        
+        .tree-node-row:hover {
+            background: #f0f0f0;
+        }
+        
+        .tree-node-row.selected {
+            background: #e8f0fe;
+            outline: 2px solid #667eea;
+        }
+        
+        .tree-node-icon {
+            font-size: 16px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .tree-node-label {
+            flex: 1;
+            font-size: 14px;
+        }
+        
+        .tree-node-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ddd;
+        }
+        
+        /* Satisfaction coloring */
+        .tree-node-row.satisfied {
+            background: #d4edda;
+        }
+        
+        .tree-node-row.satisfied .tree-node-status {
+            background: #28a745;
+        }
+        
+        .tree-node-row.not-satisfied {
+            background: #f8d7da;
+        }
+        
+        .tree-node-row.not-satisfied .tree-node-status {
+            background: #dc3545;
+        }
+        
+        .tree-node-row.not-relevant {
+            opacity: 0.5;
+        }
+        
+        .tree-node-row.not-relevant .tree-node-status {
+            background: #aaa;
+        }
+        
+        /* Details panel */
+        .detail-row {
+            margin-bottom: 15px;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+        
+        .detail-value {
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .detail-value.monospace {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: #f5f5f5;
+            padding: 8px;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+        
+        .explanation-box {
+            background: #e8f4fd;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 0 4px 4px 0;
+            margin-top: 15px;
+        }
+        
+        /* Simulator inputs */
+        .simulator-section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .simulator-section:last-child {
+            border-bottom: none;
+        }
+        
+        .simulator-section h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .simulator-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .simulator-input label {
+            flex: 1;
+            font-size: 13px;
+        }
+        
+        .simulator-input input[type="number"] {
+            width: 120px;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .simulator-input input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+        
+        .simulator-input input[type="text"] {
+            width: 200px;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        
+        .signature-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        
+        .signature-item label {
+            flex: 1;
+            margin: 0;
+            font-size: 13px;
+        }
+        
+        .hashlock-item {
+            margin-bottom: 10px;
+        }
+        
+        .hashlock-item label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 3px;
+        }
+        
+        .hashlock-item code {
+            font-size: 10px;
+            color: #666;
+        }
+        
+        /* Status display */
+        .status-display {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .status-display.spendable {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-display.not-spendable {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status-display.pending {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        
+        /* Error display */
+        .error-display {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* Loading state */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        /* No selection */
+        .no-selection {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        .examples {
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        
+        .examples a {
+            margin-right: 15px;
+            cursor: pointer;
+            color: #667eea;
+            text-decoration: underline;
+        }
+        
+        .examples a:hover {
+            color: #764ba2;
+        }
+        
+        .tree-node-children {
+            margin-left: 10px;
+        }
+        
+        .expand-icon {
+            cursor: pointer;
+            user-select: none;
+            width: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔐 Miniscript Visualizer & Simulator</h1>
+        <p>Parse, visualize, and simulate Bitcoin miniscript spending conditions</p>
+    </div>
+    
+    <div class="input-section">
+        <div class="row">
+            <div class="col-md-8">
+                <label for="miniscriptInput">Miniscript Expression</label>
+                <textarea id="miniscriptInput" class="miniscript-input" placeholder="e.g., and_v(v:pk(Alice),or_d(pk(Bob),older(1000)))"></textarea>
+                <div class="examples">
+                    <strong>Examples:</strong>
+                    <a onclick="loadExample('pk')">Single Key</a>
+                    <a onclick="loadExample('or')">OR (2 keys)</a>
+                    <a onclick="loadExample('and_after')">AND with Timelock</a>
+                    <a onclick="loadExample('multi')">Multisig</a>
+                    <a onclick="loadExample('thresh')">Threshold</a>
+                    <a onclick="loadExample('complex')">Complex</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label for="configInput">Configuration (optional JSON)</label>
+                <textarea id="configInput" class="config-input" placeholder='{
+  "params": { "Alice": "02abc..." },
+  "keyLabels": { "02abc...": "Alice (Party A)" }
+}'></textarea>
+            </div>
+        </div>
+        <div style="margin-top: 15px;">
+            <button class="btn-primary" onclick="loadPolicy()">📥 Load Policy</button>
+        </div>
+        <div id="errorDisplay"></div>
+    </div>
+    
+    <div class="main-container">
+        <div class="tree-panel">
+            <div class="tree-panel-header">📊 Policy Tree</div>
+            <div class="tree-content" id="treeContent">
+                <div class="no-selection">Enter a miniscript expression and click "Load Policy" to visualize it.</div>
+            </div>
+        </div>
+        
+        <div class="details-panel">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('details')">📋 Details</div>
+                <div class="tab" onclick="switchTab('simulator')">⚙️ Simulator</div>
+            </div>
+            <div class="tab-content active" id="detailsTab">
+                <div class="no-selection" id="detailsContent">Select a node in the tree to view its details.</div>
+            </div>
+            <div class="tab-content" id="simulatorTab">
+                <div id="simulatorContent">
+                    <div class="no-selection">Load a policy first to configure the simulator.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="miniscript.js"></script>
+    <script>
+        // ============================================================
+        // Node Types for Visualization AST
+        // ============================================================
+        const NodeType = {
+            AND: "and",
+            OR: "or",
+            THRESH: "thresh",
+            ANDOR: "andor",
+            SIGNATURE: "signature",
+            MULTISIG: "multisig",
+            TIMELOCK_ABSOLUTE: "timelock_absolute",
+            TIMELOCK_RELATIVE: "timelock_relative",
+            HASHLOCK: "hashlock",
+            CONSTANT_TRUE: "constant_true",
+            CONSTANT_FALSE: "constant_false",
+        };
+        
+        // ============================================================
+        // Global State
+        // ============================================================
+        let miniscriptToJson = null;
+        let currentTree = null;
+        let selectedNodeId = null;
+        let knownPubkeys = [];
+        let hashlocks = [];
+        let nodeIdCounter = 0;
+        
+        // Simulator state
+        let simulatorState = {
+            availableSignatures: new Set(),
+            currentHeight: 0,
+            confirmationHeight: null,
+            availablePreimages: {}
+        };
+        
+        // ============================================================
+        // Initialize WASM
+        // ============================================================
+        function initWasm() {
+            try {
+                miniscriptToJson = Module.cwrap('miniscript_to_json', 'string', ['string']);
+                console.log("WASM initialized successfully");
+            } catch (e) {
+                console.error("Failed to initialize WASM:", e);
+                showError("Failed to initialize WASM module. Please refresh the page.");
+            }
+        }
+        
+        // Check if Module is ready
+        if (typeof Module !== 'undefined') {
+            if (Module.cwrap) {
+                initWasm();
+            } else {
+                Module.onRuntimeInitialized = initWasm;
+            }
+        }
+        
+        // ============================================================
+        // Example Miniscripts
+        // ============================================================
+        const examples = {
+            pk: "pk(Alice)",
+            or: "or_i(pk(Alice),pk(Bob))",
+            and_after: "and_v(v:pk(Alice),after(800000))",
+            multi: "multi(2,Alice,Bob,Carol)",
+            thresh: "thresh(2,pk(Alice),s:pk(Bob),s:pk(Carol))",
+            complex: "or_i(and_v(v:pk(Alice),older(1000)),and_v(v:multi(2,Bob,Carol,Dave),after(800000)))"
+        };
+        
+        function loadExample(name) {
+            document.getElementById('miniscriptInput').value = examples[name] || '';
+        }
+        
+        // ============================================================
+        // Error Display
+        // ============================================================
+        function showError(msg) {
+            document.getElementById('errorDisplay').innerHTML = 
+                `<div class="error-display">${escapeHtml(msg)}</div>`;
+        }
+        
+        function clearError() {
+            document.getElementById('errorDisplay').innerHTML = '';
+        }
+        
+        function escapeHtml(text) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // ============================================================
+        // Build Visualization Tree from JSON AST
+        // ============================================================
+        function buildVisualizationTree(jsonAst, params, keyLabels) {
+            if (!jsonAst.valid || !jsonAst.root) {
+                throw new Error(jsonAst.error || "Invalid miniscript");
+            }
+            
+            nodeIdCounter = 0;
+            knownPubkeys = [];
+            hashlocks = [];
+            
+            const nodesById = {};
+            
+            function generateId() {
+                return "node_" + (nodeIdCounter++);
+            }
+            
+            function resolvePubkey(keyRef) {
+                return params[keyRef] || keyRef;
+            }
+            
+            function resolveLabel(pubkey, keyRef) {
+                return keyLabels[pubkey] || keyRef;
+            }
+            
+            // Flatten wrappers and get inner node
+            function flattenWrappers(astNode) {
+                const wrappers = [];
+                let current = astNode;
+                
+                while (current.is_wrapper && current.children && current.children.length > 0) {
+                    wrappers.push(current.fragment);
+                    current = current.children[0];
+                }
+                
+                return { inner: current, wrappers };
+            }
+            
+            function visit(astNode) {
+                const { inner, wrappers } = flattenWrappers(astNode);
+                const fragment = inner.fragment;
+                const id = generateId();
+                
+                let node = {
+                    id,
+                    type: null,
+                    label: null,
+                    miniscript: astNode.miniscript,
+                    children: [],
+                    params: {},
+                    satisfied: null,
+                    relevant: null,
+                    satisfactionPath: null
+                };
+                
+                // Map fragment to node type
+                switch (fragment) {
+                    case "pk_k":
+                    case "pk_h": {
+                        const keyRef = inner.args[0];
+                        const pubkey = resolvePubkey(keyRef);
+                        const label = resolveLabel(pubkey, keyRef);
+                        
+                        node.type = NodeType.SIGNATURE;
+                        node.label = `Signature: ${label}`;
+                        node.params = { pubkey, pubkeyLabel: label, wrappers, keyRef };
+                        
+                        // Track known pubkeys
+                        if (!knownPubkeys.find(k => k.pubkey === pubkey)) {
+                            knownPubkeys.push({ pubkey, label, keyRef });
+                        }
+                        break;
+                    }
+                    
+                    case "multi": {
+                        const k = inner.args[0];
+                        const keyRefs = inner.args.slice(1);
+                        const keys = keyRefs.map(resolvePubkey);
+                        const labels = keys.map((pk, i) => resolveLabel(pk, keyRefs[i]));
+                        
+                        node.type = NodeType.MULTISIG;
+                        node.label = `Multisig: ${k} of ${keys.length}`;
+                        node.params = { k, n: keys.length, keys, keyLabels: labels, keyRefs };
+                        
+                        // Track known pubkeys
+                        keys.forEach((pubkey, i) => {
+                            if (!knownPubkeys.find(kp => kp.pubkey === pubkey)) {
+                                knownPubkeys.push({ pubkey, label: labels[i], keyRef: keyRefs[i] });
+                            }
+                        });
+                        break;
+                    }
+                    
+                    case "after": {
+                        const height = inner.args[0];
+                        node.type = NodeType.TIMELOCK_ABSOLUTE;
+                        node.label = `After block ${height}`;
+                        node.params = { lockType: "absolute", value: height, unit: "height" };
+                        break;
+                    }
+                    
+                    case "older": {
+                        const blocks = inner.args[0];
+                        node.type = NodeType.TIMELOCK_RELATIVE;
+                        node.label = `After ${blocks} blocks`;
+                        node.params = { lockType: "relative", value: blocks, unit: "blocks" };
+                        break;
+                    }
+                    
+                    case "sha256":
+                    case "hash256":
+                    case "ripemd160":
+                    case "hash160": {
+                        const hash = inner.args[0];
+                        node.type = NodeType.HASHLOCK;
+                        node.label = `Hashlock (${fragment})`;
+                        node.params = { hashType: fragment, hash };
+                        
+                        // Track hashlocks
+                        if (!hashlocks.find(h => h.hash === hash)) {
+                            hashlocks.push({ hashType: fragment, hash });
+                        }
+                        break;
+                    }
+                    
+                    case "and_v":
+                    case "and_b":
+                    case "and_n": {
+                        node.type = NodeType.AND;
+                        node.label = "AND";
+                        // Process children
+                        if (inner.children) {
+                            node.children = inner.children.map(child => {
+                                const childNode = visit(child);
+                                return childNode.id;
+                            });
+                        }
+                        break;
+                    }
+                    
+                    case "or_i":
+                    case "or_d":
+                    case "or_c":
+                    case "or_b": {
+                        node.type = NodeType.OR;
+                        node.label = "OR";
+                        // Process children
+                        if (inner.children) {
+                            node.children = inner.children.map(child => {
+                                const childNode = visit(child);
+                                return childNode.id;
+                            });
+                        }
+                        break;
+                    }
+                    
+                    case "andor": {
+                        node.type = NodeType.ANDOR;
+                        node.label = "AND-OR (if-then-else)";
+                        // andor has 3 children: condition, then, else
+                        if (inner.children && inner.children.length === 3) {
+                            node.children = inner.children.map(child => {
+                                const childNode = visit(child);
+                                return childNode.id;
+                            });
+                        }
+                        break;
+                    }
+                    
+                    case "thresh": {
+                        const k = inner.args[0];
+                        node.type = NodeType.THRESH;
+                        node.label = `Threshold: ${k} of ${inner.children ? inner.children.length : '?'}`;
+                        node.params = { k };
+                        // Process children
+                        if (inner.children) {
+                            node.children = inner.children.map(child => {
+                                const childNode = visit(child);
+                                return childNode.id;
+                            });
+                        }
+                        break;
+                    }
+                    
+                    case "1":
+                    case "just_1": {
+                        node.type = NodeType.CONSTANT_TRUE;
+                        node.label = "Always True";
+                        break;
+                    }
+                    
+                    case "0":
+                    case "just_0": {
+                        node.type = NodeType.CONSTANT_FALSE;
+                        node.label = "Always False";
+                        break;
+                    }
+                    
+                    default: {
+                        // Handle wrappers that wrap other combinators
+                        // Try to process as a combinator if it has children
+                        if (inner.children && inner.children.length > 0) {
+                            // Check if it looks like an AND/OR based on children count
+                            if (inner.children.length === 2) {
+                                node.type = NodeType.AND;
+                                node.label = `${fragment} (combinator)`;
+                            } else if (inner.children.length >= 1) {
+                                node.type = NodeType.AND;
+                                node.label = fragment;
+                            }
+                            node.children = inner.children.map(child => {
+                                const childNode = visit(child);
+                                return childNode.id;
+                            });
+                        } else {
+                            // Unknown leaf node
+                            node.type = NodeType.CONSTANT_TRUE;
+                            node.label = fragment;
+                        }
+                        break;
+                    }
+                }
+                
+                nodesById[id] = node;
+                return node;
+            }
+            
+            const rootNode = visit(jsonAst.root);
+            
+            return {
+                nodesById,
+                rootId: rootNode.id
+            };
+        }
+        
+        // ============================================================
+        // Simulator Evaluation Logic
+        // ============================================================
+        function evaluateSatisfaction(node, nodesById, simState) {
+            const {
+                availableSignatures,
+                currentHeight,
+                confirmationHeight,
+                availablePreimages
+            } = simState;
+            
+            node.satisfactionPath = null;
+            
+            switch (node.type) {
+                case NodeType.AND: {
+                    let all = true;
+                    for (const childId of node.children) {
+                        const child = nodesById[childId];
+                        if (!evaluateSatisfaction(child, nodesById, simState)) {
+                            all = false;
+                        }
+                    }
+                    node.satisfied = all;
+                    return node.satisfied;
+                }
+                
+                case NodeType.OR: {
+                    for (const childId of node.children) {
+                        const child = nodesById[childId];
+                        if (evaluateSatisfaction(child, nodesById, simState)) {
+                            node.satisfied = true;
+                            node.satisfactionPath = childId;
+                            return true;
+                        }
+                    }
+                    node.satisfied = false;
+                    return false;
+                }
+                
+                case NodeType.THRESH: {
+                    const k = node.params.k;
+                    let count = 0;
+                    for (const childId of node.children) {
+                        const child = nodesById[childId];
+                        if (evaluateSatisfaction(child, nodesById, simState)) {
+                            count++;
+                        }
+                    }
+                    node.satisfied = count >= k;
+                    return node.satisfied;
+                }
+                
+                case NodeType.ANDOR: {
+                    if (node.children.length !== 3) {
+                        node.satisfied = false;
+                        return false;
+                    }
+                    const [condId, thenId, elseId] = node.children;
+                    const cond = nodesById[condId];
+                    const thenNode = nodesById[thenId];
+                    const elseNode = nodesById[elseId];
+                    
+                    const condSatisfied = evaluateSatisfaction(cond, nodesById, simState);
+                    if (condSatisfied) {
+                        const thenSatisfied = evaluateSatisfaction(thenNode, nodesById, simState);
+                        node.satisfied = condSatisfied && thenSatisfied;
+                        node.satisfactionPath = thenSatisfied ? thenId : null;
+                    } else {
+                        const elseSatisfied = evaluateSatisfaction(elseNode, nodesById, simState);
+                        node.satisfied = !condSatisfied && elseSatisfied;
+                        node.satisfactionPath = elseSatisfied ? elseId : null;
+                    }
+                    return node.satisfied;
+                }
+                
+                case NodeType.SIGNATURE: {
+                    const pubkey = node.params.pubkey;
+                    node.satisfied = availableSignatures.has(pubkey);
+                    return node.satisfied;
+                }
+                
+                case NodeType.MULTISIG: {
+                    const requiredK = node.params.k;
+                    const keys = node.params.keys || [];
+                    let availableCount = 0;
+                    for (const k of keys) {
+                        if (availableSignatures.has(k)) availableCount++;
+                    }
+                    node.satisfied = availableCount >= requiredK;
+                    return node.satisfied;
+                }
+                
+                case NodeType.TIMELOCK_ABSOLUTE: {
+                    const locktime = node.params.value;
+                    node.satisfied = typeof currentHeight === "number" &&
+                        !Number.isNaN(currentHeight) &&
+                        currentHeight >= locktime;
+                    return node.satisfied;
+                }
+                
+                case NodeType.TIMELOCK_RELATIVE: {
+                    const blocks = node.params.value;
+                    if (confirmationHeight === null || confirmationHeight === undefined ||
+                        Number.isNaN(confirmationHeight)) {
+                        node.satisfied = false;
+                    } else {
+                        node.satisfied = currentHeight - confirmationHeight >= blocks;
+                    }
+                    return node.satisfied;
+                }
+                
+                case NodeType.HASHLOCK: {
+                    const hash = node.params.hash;
+                    node.satisfied = !!availablePreimages &&
+                        typeof availablePreimages[hash] === "string" &&
+                        availablePreimages[hash].length > 0;
+                    return node.satisfied;
+                }
+                
+                case NodeType.CONSTANT_TRUE:
+                    node.satisfied = true;
+                    return true;
+                
+                case NodeType.CONSTANT_FALSE:
+                    node.satisfied = false;
+                    return false;
+                
+                default:
+                    node.satisfied = false;
+                    return false;
+            }
+        }
+        
+        function resetSatisfaction(nodesById) {
+            for (const id in nodesById) {
+                const node = nodesById[id];
+                node.satisfied = null;
+                node.relevant = null;
+                node.satisfactionPath = null;
+            }
+        }
+        
+        function markRelevanceSatisfied(node, nodesById) {
+            node.relevant = true;
+            
+            if (node.type === NodeType.OR && node.satisfactionPath) {
+                for (const childId of node.children) {
+                    const child = nodesById[childId];
+                    if (!child) continue;
+                    if (childId === node.satisfactionPath) {
+                        markRelevanceSatisfied(child, nodesById);
+                    } else {
+                        child.relevant = false;
+                    }
+                }
+            } else if (node.type === NodeType.AND) {
+                for (const childId of node.children) {
+                    const child = nodesById[childId];
+                    if (!child) continue;
+                    markRelevanceSatisfied(child, nodesById);
+                }
+            } else if (node.type === NodeType.THRESH) {
+                for (const childId of node.children) {
+                    const child = nodesById[childId];
+                    if (!child) continue;
+                    if (child.satisfied) {
+                        markRelevanceSatisfied(child, nodesById);
+                    } else {
+                        child.relevant = false;
+                    }
+                }
+            } else if (node.type === NodeType.ANDOR && node.children.length === 3) {
+                const [condId, thenId, elseId] = node.children;
+                const cond = nodesById[condId];
+                const thenNode = nodesById[thenId];
+                const elseNode = nodesById[elseId];
+                
+                if (cond && cond.satisfied && thenNode && thenNode.satisfied) {
+                    markRelevanceSatisfied(cond, nodesById);
+                    markRelevanceSatisfied(thenNode, nodesById);
+                    if (elseNode) elseNode.relevant = false;
+                } else if (cond && !cond.satisfied && elseNode && elseNode.satisfied) {
+                    cond.relevant = true;
+                    markRelevanceSatisfied(elseNode, nodesById);
+                    if (thenNode) thenNode.relevant = false;
+                }
+            }
+        }
+        
+        // ============================================================
+        // Node Icons
+        // ============================================================
+        function getNodeIcon(type) {
+            switch (type) {
+                case NodeType.SIGNATURE: return "🔑";
+                case NodeType.MULTISIG: return "🔢";
+                case NodeType.TIMELOCK_ABSOLUTE:
+                case NodeType.TIMELOCK_RELATIVE: return "⏰";
+                case NodeType.HASHLOCK: return "🔒";
+                case NodeType.AND: return "➕";
+                case NodeType.OR: return "🔀";
+                case NodeType.THRESH: return "📊";
+                case NodeType.ANDOR: return "🔃";
+                case NodeType.CONSTANT_TRUE: return "✅";
+                case NodeType.CONSTANT_FALSE: return "❌";
+                default: return "📦";
+            }
+        }
+        
+        // ============================================================
+        // Render Tree
+        // ============================================================
+        function renderTree() {
+            const container = document.getElementById('treeContent');
+            
+            if (!currentTree) {
+                container.innerHTML = '<div class="no-selection">Enter a miniscript expression and click "Load Policy" to visualize it.</div>';
+                return;
+            }
+            
+            function renderNode(nodeId, depth = 0) {
+                const node = currentTree.nodesById[nodeId];
+                if (!node) return '';
+                
+                let statusClass = '';
+                if (node.satisfied === true && node.relevant === true) {
+                    statusClass = 'satisfied';
+                } else if (node.relevant === true && node.satisfied === false) {
+                    statusClass = 'not-satisfied';
+                } else if (node.relevant === false) {
+                    statusClass = 'not-relevant';
+                }
+                
+                const selectedClass = selectedNodeId === nodeId ? 'selected' : '';
+                const hasChildren = node.children && node.children.length > 0;
+                
+                let html = `
+                    <div class="tree-node" data-node-id="${nodeId}">
+                        <div class="tree-node-row ${statusClass} ${selectedClass}" onclick="selectNode('${nodeId}')">
+                            ${hasChildren ? '<span class="expand-icon">▼</span>' : '<span class="expand-icon"> </span>'}
+                            <span class="tree-node-icon">${getNodeIcon(node.type)}</span>
+                            <span class="tree-node-label">${escapeHtml(node.label)}</span>
+                            <span class="tree-node-status"></span>
+                        </div>
+                `;
+                
+                if (hasChildren) {
+                    html += '<div class="tree-node-children">';
+                    for (const childId of node.children) {
+                        html += renderNode(childId, depth + 1);
+                    }
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+                return html;
+            }
+            
+            container.innerHTML = renderNode(currentTree.rootId);
+        }
+        
+        // ============================================================
+        // Select Node
+        // ============================================================
+        function selectNode(nodeId) {
+            selectedNodeId = nodeId;
+            renderTree();
+            renderDetails();
+        }
+        
+        // ============================================================
+        // Explain Node
+        // ============================================================
+        function explainNode(node) {
+            switch (node.type) {
+                case NodeType.SIGNATURE:
+                    return `Requires a valid signature from ${node.params.pubkeyLabel || "the specified public key"}.`;
+                case NodeType.MULTISIG:
+                    return `Requires at least ${node.params.k} signatures out of ${node.params.n} possible keys.`;
+                case NodeType.TIMELOCK_ABSOLUTE:
+                    return `Can only be spent once the blockchain has reached block height ${node.params.value} or higher.`;
+                case NodeType.TIMELOCK_RELATIVE:
+                    return `Can only be spent after at least ${node.params.value} blocks have elapsed since confirmation.`;
+                case NodeType.HASHLOCK:
+                    return `Requires revealing a secret whose ${node.params.hashType || "hash"} matches the stored hash.`;
+                case NodeType.AND:
+                    return "All child conditions in this AND node must be satisfied.";
+                case NodeType.OR:
+                    return "At least one of the child conditions in this OR node must be satisfied.";
+                case NodeType.THRESH:
+                    return `At least ${node.params.k} of this node's children must be satisfied.`;
+                case NodeType.ANDOR:
+                    return "If the first condition holds, the 'then' branch must be satisfied; otherwise the 'else' branch must be satisfied.";
+                case NodeType.CONSTANT_TRUE:
+                    return "This condition is always true.";
+                case NodeType.CONSTANT_FALSE:
+                    return "This condition is always false and blocks spending along this branch.";
+                default:
+                    return "Part of the Miniscript policy. Its children and parameters determine how it contributes to spending rules.";
+            }
+        }
+        
+        // ============================================================
+        // Render Details Tab
+        // ============================================================
+        function renderDetails() {
+            const container = document.getElementById('detailsContent');
+            
+            if (!currentTree || !selectedNodeId) {
+                container.innerHTML = '<div class="no-selection">Select a node in the tree to view its details.</div>';
+                return;
+            }
+            
+            const node = currentTree.nodesById[selectedNodeId];
+            if (!node) {
+                container.innerHTML = '<div class="no-selection">Node not found.</div>';
+                return;
+            }
+            
+            let paramsHtml = '';
+            if (Object.keys(node.params).length > 0) {
+                paramsHtml = `
+                    <div class="detail-row">
+                        <div class="detail-label">Parameters</div>
+                        <div class="detail-value monospace">${escapeHtml(JSON.stringify(node.params, null, 2))}</div>
+                    </div>
+                `;
+            }
+            
+            let statusHtml = '';
+            if (node.satisfied !== null) {
+                const statusText = node.satisfied ? '✅ Satisfied' : '❌ Not Satisfied';
+                const relevantText = node.relevant === true ? ' (relevant)' : (node.relevant === false ? ' (not relevant)' : '');
+                statusHtml = `
+                    <div class="detail-row">
+                        <div class="detail-label">Simulation Status</div>
+                        <div class="detail-value">${statusText}${relevantText}</div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = `
+                <div class="detail-row">
+                    <div class="detail-label">Type</div>
+                    <div class="detail-value">${getNodeIcon(node.type)} ${node.type}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Label</div>
+                    <div class="detail-value">${escapeHtml(node.label)}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Miniscript</div>
+                    <div class="detail-value monospace">${escapeHtml(node.miniscript || 'N/A')}</div>
+                </div>
+                ${paramsHtml}
+                ${statusHtml}
+                <div class="explanation-box">
+                    <strong>📖 Explanation:</strong><br>
+                    ${explainNode(node)}
+                </div>
+            `;
+        }
+        
+        // ============================================================
+        // Render Simulator Tab
+        // ============================================================
+        function renderSimulator() {
+            const container = document.getElementById('simulatorContent');
+            
+            if (!currentTree) {
+                container.innerHTML = '<div class="no-selection">Load a policy first to configure the simulator.</div>';
+                return;
+            }
+            
+            // Build signature checkboxes
+            let signaturesHtml = '';
+            if (knownPubkeys.length > 0) {
+                signaturesHtml = '<div class="simulator-section"><h4>🔑 Available Signatures</h4>';
+                knownPubkeys.forEach(({ pubkey, label, keyRef }) => {
+                    const checked = simulatorState.availableSignatures.has(pubkey) ? 'checked' : '';
+                    signaturesHtml += `
+                        <div class="signature-item">
+                            <input type="checkbox" id="sig_${pubkey}" ${checked} onchange="toggleSignature('${pubkey}')">
+                            <label for="sig_${pubkey}">${escapeHtml(label)} <code style="font-size:10px;color:#666;">(${escapeHtml(pubkey.substring(0, 16))}...)</code></label>
+                        </div>
+                    `;
+                });
+                signaturesHtml += '</div>';
+            }
+            
+            // Build hashlock inputs
+            let hashlocksHtml = '';
+            if (hashlocks.length > 0) {
+                hashlocksHtml = '<div class="simulator-section"><h4>🔒 Hash Preimages</h4>';
+                hashlocks.forEach(({ hashType, hash }, i) => {
+                    const preimage = simulatorState.availablePreimages[hash] || '';
+                    hashlocksHtml += `
+                        <div class="hashlock-item">
+                            <label>${hashType}: <code>${escapeHtml(hash.substring(0, 16))}...</code></label>
+                            <input type="text" id="preimage_${i}" value="${escapeHtml(preimage)}" 
+                                placeholder="Enter preimage (any value)" 
+                                onchange="setPreimage('${hash}', this.value)">
+                        </div>
+                    `;
+                });
+                hashlocksHtml += '</div>';
+            }
+            
+            container.innerHTML = `
+                <div class="simulator-section">
+                    <h4>⏰ Block Heights</h4>
+                    <div class="simulator-input">
+                        <label for="currentHeight">Current Block Height:</label>
+                        <input type="number" id="currentHeight" value="${simulatorState.currentHeight}" 
+                            onchange="simulatorState.currentHeight = parseInt(this.value) || 0">
+                    </div>
+                    <div class="simulator-input">
+                        <label for="confirmationHeight">Confirmation Height (for relative timelocks):</label>
+                        <input type="number" id="confirmationHeight" 
+                            value="${simulatorState.confirmationHeight || ''}" 
+                            placeholder="Optional"
+                            onchange="simulatorState.confirmationHeight = this.value ? parseInt(this.value) : null">
+                    </div>
+                </div>
+                
+                ${signaturesHtml}
+                ${hashlocksHtml}
+                
+                <div style="margin-top: 20px;">
+                    <button class="btn-primary" onclick="runSimulation()">▶️ Run Simulation</button>
+                </div>
+                
+                <div id="simulationStatus"></div>
+            `;
+        }
+        
+        function toggleSignature(pubkey) {
+            if (simulatorState.availableSignatures.has(pubkey)) {
+                simulatorState.availableSignatures.delete(pubkey);
+            } else {
+                simulatorState.availableSignatures.add(pubkey);
+            }
+        }
+        
+        function setPreimage(hash, value) {
+            simulatorState.availablePreimages[hash] = value;
+        }
+        
+        // ============================================================
+        // Run Simulation
+        // ============================================================
+        function runSimulation() {
+            if (!currentTree) return;
+            
+            // Update simulator state from inputs
+            simulatorState.currentHeight = parseInt(document.getElementById('currentHeight').value) || 0;
+            const confHeight = document.getElementById('confirmationHeight').value;
+            simulatorState.confirmationHeight = confHeight ? parseInt(confHeight) : null;
+            
+            // Reset and evaluate
+            resetSatisfaction(currentTree.nodesById);
+            
+            const rootNode = currentTree.nodesById[currentTree.rootId];
+            const satisfied = evaluateSatisfaction(rootNode, currentTree.nodesById, simulatorState);
+            
+            if (satisfied) {
+                markRelevanceSatisfied(rootNode, currentTree.nodesById);
+            } else {
+                // Mark all as relevant when not satisfied
+                for (const id in currentTree.nodesById) {
+                    currentTree.nodesById[id].relevant = true;
+                }
+            }
+            
+            // Update UI
+            renderTree();
+            renderDetails();
+            
+            // Show status
+            const statusContainer = document.getElementById('simulationStatus');
+            if (satisfied) {
+                statusContainer.innerHTML = `
+                    <div class="status-display spendable">
+                        ✅ Spendable!<br>
+                        <small>The current conditions satisfy the spending policy.</small>
+                    </div>
+                `;
+            } else {
+                statusContainer.innerHTML = `
+                    <div class="status-display not-spendable">
+                        ❌ Not Spendable<br>
+                        <small>The current conditions do not satisfy the spending policy.</small>
+                    </div>
+                `;
+            }
+        }
+        
+        // ============================================================
+        // Tab Switching
+        // ============================================================
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            document.querySelector(`.tab:nth-child(${tabName === 'details' ? 1 : 2})`).classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+        
+        // ============================================================
+        // Load Policy (Main Entry Point)
+        // ============================================================
+        function loadPolicy() {
+            clearError();
+            
+            if (!miniscriptToJson) {
+                showError("WASM module not initialized. Please wait and try again.");
+                return;
+            }
+            
+            const miniscriptStr = document.getElementById('miniscriptInput').value.trim();
+            if (!miniscriptStr) {
+                showError("Please enter a miniscript expression.");
+                return;
+            }
+            
+            // Parse optional config
+            let params = {};
+            let keyLabels = {};
+            const configStr = document.getElementById('configInput').value.trim();
+            if (configStr) {
+                try {
+                    const parsed = JSON.parse(configStr);
+                    params = parsed.params || {};
+                    keyLabels = parsed.keyLabels || {};
+                } catch (e) {
+                    showError("Invalid JSON in configuration: " + e.message);
+                    return;
+                }
+            }
+            
+            try {
+                // Call WASM to get JSON AST
+                const jsonStr = miniscriptToJson(miniscriptStr);
+                const ast = JSON.parse(jsonStr);
+                
+                if (!ast.valid) {
+                    showError("Invalid miniscript: " + (ast.error || "Unknown error"));
+                    return;
+                }
+                
+                // Build visualization tree
+                currentTree = buildVisualizationTree(ast, params, keyLabels);
+                selectedNodeId = currentTree.rootId;
+                
+                // Reset simulator state
+                simulatorState = {
+                    availableSignatures: new Set(),
+                    currentHeight: 0,
+                    confirmationHeight: null,
+                    availablePreimages: {}
+                };
+                
+                // Render everything
+                renderTree();
+                renderDetails();
+                renderSimulator();
+                
+                console.log("Policy loaded successfully:", currentTree);
+                console.log("Known pubkeys:", knownPubkeys);
+                console.log("Hashlocks:", hashlocks);
+                
+            } catch (e) {
+                showError("Error processing miniscript: " + e.message);
+                console.error(e);
+            }
+        }
+    </script>
+</body>
+</html>
