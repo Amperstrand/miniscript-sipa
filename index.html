@@ -51,6 +51,135 @@ em_miniscript_analyze = Module.cwrap('miniscript_analyze', 'none', ['string', 'n
  */
 em_miniscript_to_json = Module.cwrap('miniscript_to_json', 'string', ['string']);
 
+/**
+ * New: miniscript_to_rete_json - Convert a miniscript to Rete.js-compatible graph JSON.
+ * 
+ * This produces JSON that can be loaded directly into miniscript.fun via editor.fromJSON().
+ * 
+ * Usage example:
+ * 
+ *   const reteJson = em_miniscript_to_rete_json("and_v(pk(A),after(100))");
+ *   const graph = JSON.parse(reteJson);
+ *   // In miniscript.fun: editor.fromJSON(graph);
+ */
+em_miniscript_to_rete_json = Module.cwrap('miniscript_to_rete_json', 'string', ['string']);
+
+/**
+ * New: miniscript_to_complete_rete_json - Convert a miniscript to complete Rete.js graph with dummy nodes.
+ * 
+ * Similar to miniscript_to_rete_json, but adds BIP39, Descriptor, and Address nodes
+ * for a fully functional graph in miniscript.fun.
+ */
+em_miniscript_to_complete_rete_json = Module.cwrap('miniscript_to_complete_rete_json', 'string', ['string']);
+
+// Store last generated JSON for copy functionality
+var lastJsonAst = null;
+var lastReteJson = null;
+var lastCompleteReteJson = null;
+
+// Copy to clipboard helper
+function copyToClipboard(text, buttonId) {
+    navigator.clipboard.writeText(text).then(function() {
+        var btn = document.getElementById(buttonId);
+        var originalText = btn.textContent;
+        btn.textContent = "Copied!";
+        btn.classList.add("btn-success");
+        btn.classList.remove("btn-secondary");
+        setTimeout(function() {
+            btn.textContent = originalText;
+            btn.classList.remove("btn-success");
+            btn.classList.add("btn-secondary");
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Failed to copy:', err);
+        alert('Failed to copy to clipboard');
+    });
+}
+
+function copyJsonAst() {
+    if (lastJsonAst) {
+        copyToClipboard(JSON.stringify(lastJsonAst, null, 2), 'copyJsonAstBtn');
+    }
+}
+
+function copyReteJson() {
+    if (lastReteJson) {
+        copyToClipboard(JSON.stringify(lastReteJson, null, 2), 'copyReteJsonBtn');
+    }
+}
+
+function copyAnalyzeJsonAst() {
+    if (window.lastAnalyzeJsonAst) {
+        copyToClipboard(JSON.stringify(window.lastAnalyzeJsonAst, null, 2), 'copyAnalyzeJsonAstBtn');
+    }
+}
+
+function copyAnalyzeReteJson() {
+    if (window.lastAnalyzeReteJson) {
+        copyToClipboard(JSON.stringify(window.lastAnalyzeReteJson, null, 2), 'copyAnalyzeReteJsonBtn');
+    }
+}
+
+function copyCompleteReteJson() {
+    if (lastCompleteReteJson) {
+        copyToClipboard(JSON.stringify(lastCompleteReteJson, null, 2), 'copyCompleteReteJsonBtn');
+    }
+}
+
+function copyAnalyzeCompleteReteJson() {
+    if (window.lastAnalyzeCompleteReteJson) {
+        copyToClipboard(JSON.stringify(window.lastAnalyzeCompleteReteJson, null, 2), 'copyAnalyzeCompleteReteJsonBtn');
+    }
+}
+
+// Open in miniscript.fun helper - base64 encodes the JSON and opens in new tab
+function openInMiniscriptFun(jsonData, buttonId) {
+    if (!jsonData) {
+        alert('No Rete JSON available to view');
+        return;
+    }
+    try {
+        // Get JSON as compact string (no pretty printing for URL)
+        var jsonStr = JSON.stringify(jsonData);
+        
+        // Base64 encode (handle UTF-8 characters safely)
+        var encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+        
+        // Build URL and open in new tab
+        var url = 'https://miniscript.fun/#/full/' + encoded;
+        window.open(url, '_blank');
+        
+        // Visual feedback on button
+        var btn = document.getElementById(buttonId);
+        if (btn) {
+            var originalText = btn.textContent;
+            btn.textContent = "Opening...";
+            setTimeout(function() {
+                btn.textContent = originalText;
+            }, 1000);
+        }
+    } catch (e) {
+        console.error('Error opening miniscript.fun:', e);
+        alert('Failed to open miniscript.fun: ' + e.message);
+    }
+}
+
+function viewReteInMiniscriptFun() {
+    openInMiniscriptFun(lastReteJson, 'viewReteBtn');
+}
+
+function viewAnalyzeReteInMiniscriptFun() {
+    openInMiniscriptFun(window.lastAnalyzeReteJson, 'viewAnalyzeReteBtn');
+}
+
+function viewCompleteReteInMiniscriptFun() {
+    openInMiniscriptFun(lastCompleteReteJson, 'viewCompleteReteBtn');
+}
+
+function viewAnalyzeCompleteReteInMiniscriptFun() {
+    openInMiniscriptFun(window.lastAnalyzeCompleteReteJson, 'viewAnalyzeCompleteReteBtn');
+}
+
 // Smoke test: log a sample JSON AST to console when the page loads
 // (This runs after the WASM module is ready)
 if (typeof console !== 'undefined') {
@@ -87,17 +216,58 @@ function miniscript_compile() {
         
         // Generate JSON/AST for the compiled miniscript
         var jsonOutput = "";
-        var jsonData = null;
+        var reteOutput = "";
+        var completeReteOutput = "";
+        lastJsonAst = null;
+        lastReteJson = null;
+        lastCompleteReteJson = null;
+        
         if (miniscriptStr && !miniscriptStr.includes("[compile error]") && !miniscriptStr.includes("[exception")) {
             try {
+                // JSON/AST representation
                 var jsonStr = em_miniscript_to_json(miniscriptStr);
-                jsonData = JSON.parse(jsonStr);
+                var jsonData = JSON.parse(jsonStr);
                 console.log("Compile - JSON AST:", jsonData);
                 
                 if (jsonData.valid) {
-                    jsonOutput = "<p><b>JSON/AST Representation:</b><details><summary>Click to expand</summary>" +
-                        "<pre style='background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto;'>" + 
+                    lastJsonAst = jsonData;
+                    jsonOutput = "<p><b>JSON/AST Representation:</b> " +
+                        "<button id='copyJsonAstBtn' class='btn btn-sm btn-secondary' onclick='copyJsonAst()'>📋 Copy JSON</button>" +
+                        "<details><summary>Click to expand</summary>" +
+                        "<pre style='background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; max-height: 400px;'>" + 
                         htmlEscape(JSON.stringify(jsonData, null, 2)) + 
+                        "</pre></details>";
+                }
+                
+                // Rete.js compatible representation (simple)
+                var reteStr = em_miniscript_to_rete_json(miniscriptStr);
+                var reteData = JSON.parse(reteStr);
+                console.log("Compile - Rete JSON:", reteData);
+                
+                if (!reteData.error) {
+                    lastReteJson = reteData;
+                    reteOutput = "<p><b>Rete.js Graph (simple):</b> " +
+                        "<button id='copyReteJsonBtn' class='btn btn-sm btn-secondary' onclick='copyReteJson()'>📋 Copy</button> " +
+                        "<button id='viewReteBtn' class='btn btn-sm btn-info' onclick='viewReteInMiniscriptFun()'>🔗 View in miniscript.fun</button>" +
+                        "<details><summary>Click to expand</summary>" +
+                        "<pre style='background: #e8f4e8; padding: 10px; border-radius: 4px; overflow: auto; max-height: 400px;'>" + 
+                        htmlEscape(JSON.stringify(reteData, null, 2)) + 
+                        "</pre></details>";
+                }
+                
+                // Complete Rete.js representation (with BIP39, Descriptor, Address)
+                var completeReteStr = em_miniscript_to_complete_rete_json(miniscriptStr);
+                var completeReteData = JSON.parse(completeReteStr);
+                console.log("Compile - Complete Rete JSON:", completeReteData);
+                
+                if (!completeReteData.error) {
+                    lastCompleteReteJson = completeReteData;
+                    completeReteOutput = "<p><b>Rete.js Graph (with dummy keys):</b> " +
+                        "<button id='copyCompleteReteJsonBtn' class='btn btn-sm btn-secondary' onclick='copyCompleteReteJson()'>📋 Copy</button> " +
+                        "<button id='viewCompleteReteBtn' class='btn btn-sm btn-success' onclick='viewCompleteReteInMiniscriptFun()'>🔗 View in miniscript.fun</button>" +
+                        "<details><summary>Click to expand (includes BIP39 → Key → Policy → Descriptor → Address)</summary>" +
+                        "<pre style='background: #f4e8f4; padding: 10px; border-radius: 4px; overflow: auto; max-height: 400px;'>" + 
+                        htmlEscape(JSON.stringify(completeReteData, null, 2)) + 
                         "</pre></details>";
                 }
             } catch (e) {
@@ -109,7 +279,7 @@ function miniscript_compile() {
             "<p><p><b>Miniscript output:</b><p><code>" + htmlEscape(miniscriptStr) + "</code>" +
             "<p><b>Spending cost analysis</b><p>" + Module.UTF8ToString(costout) + "" +
             "<p><b>Resulting script structure</b><p><samp><pre>" + htmlEscape(Module.UTF8ToString(asmout)) + "</pre></samp>" +
-            jsonOutput;
+            jsonOutput + reteOutput + completeReteOutput;
         Module._free(msout)
         Module._free(costout)
         Module._free(asmout)
@@ -133,17 +303,58 @@ function miniscript_analyze() {
         
         // Generate JSON/AST for the analyzed miniscript
         var jsonOutput = "";
-        var jsonData = null;
+        var reteOutput = "";
+        var completeReteOutput = "";
+        window.lastAnalyzeJsonAst = null;
+        window.lastAnalyzeReteJson = null;
+        window.lastAnalyzeCompleteReteJson = null;
+        
         if (src && !analysisStr.includes("[analysis error]") && !analysisStr.includes("[exception")) {
             try {
+                // JSON/AST representation
                 var jsonStr = em_miniscript_to_json(src);
-                jsonData = JSON.parse(jsonStr);
+                var jsonData = JSON.parse(jsonStr);
                 console.log("Analyze - JSON AST:", jsonData);
                 
                 if (jsonData.valid) {
-                    jsonOutput = "<p><b>JSON/AST Representation:</b><details><summary>Click to expand</summary>" +
-                        "<pre style='background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto;'>" + 
+                    window.lastAnalyzeJsonAst = jsonData;
+                    jsonOutput = "<p><b>JSON/AST Representation:</b> " +
+                        "<button id='copyAnalyzeJsonAstBtn' class='btn btn-sm btn-secondary' onclick='copyAnalyzeJsonAst()'>📋 Copy JSON</button>" +
+                        "<details><summary>Click to expand</summary>" +
+                        "<pre style='background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; max-height: 400px;'>" + 
                         htmlEscape(JSON.stringify(jsonData, null, 2)) + 
+                        "</pre></details>";
+                }
+                
+                // Rete.js compatible representation (simple)
+                var reteStr = em_miniscript_to_rete_json(src);
+                var reteData = JSON.parse(reteStr);
+                console.log("Analyze - Rete JSON:", reteData);
+                
+                if (!reteData.error) {
+                    window.lastAnalyzeReteJson = reteData;
+                    reteOutput = "<p><b>Rete.js Graph (simple):</b> " +
+                        "<button id='copyAnalyzeReteJsonBtn' class='btn btn-sm btn-secondary' onclick='copyAnalyzeReteJson()'>📋 Copy</button> " +
+                        "<button id='viewAnalyzeReteBtn' class='btn btn-sm btn-info' onclick='viewAnalyzeReteInMiniscriptFun()'>🔗 View in miniscript.fun</button>" +
+                        "<details><summary>Click to expand</summary>" +
+                        "<pre style='background: #e8f4e8; padding: 10px; border-radius: 4px; overflow: auto; max-height: 400px;'>" + 
+                        htmlEscape(JSON.stringify(reteData, null, 2)) + 
+                        "</pre></details>";
+                }
+                
+                // Complete Rete.js representation (with BIP39, Descriptor, Address)
+                var completeReteStr = em_miniscript_to_complete_rete_json(src);
+                var completeReteData = JSON.parse(completeReteStr);
+                console.log("Analyze - Complete Rete JSON:", completeReteData);
+                
+                if (!completeReteData.error) {
+                    window.lastAnalyzeCompleteReteJson = completeReteData;
+                    completeReteOutput = "<p><b>Rete.js Graph (with dummy keys):</b> " +
+                        "<button id='copyAnalyzeCompleteReteJsonBtn' class='btn btn-sm btn-secondary' onclick='copyAnalyzeCompleteReteJson()'>📋 Copy</button> " +
+                        "<button id='viewAnalyzeCompleteReteBtn' class='btn btn-sm btn-success' onclick='viewAnalyzeCompleteReteInMiniscriptFun()'>🔗 View in miniscript.fun</button>" +
+                        "<details><summary>Click to expand (includes BIP39 → Key → Policy → Descriptor → Address)</summary>" +
+                        "<pre style='background: #f4e8f4; padding: 10px; border-radius: 4px; overflow: auto; max-height: 400px;'>" + 
+                        htmlEscape(JSON.stringify(completeReteData, null, 2)) + 
                         "</pre></details>";
                 }
             } catch (e) {
@@ -154,7 +365,7 @@ function miniscript_analyze() {
         document.getElementById("analyze_out").innerHTML =
             "<p><p><b>Analysis</b><p>" + analysisStr + "<p><small>Hover over the tree elements for more details</small>" +
             "<p><b>Resulting script structure</b><p><samp><pre>" + htmlEscape(Module.UTF8ToString(asmout)) + "</pre></samp>" +
-            jsonOutput;
+            jsonOutput + reteOutput + completeReteOutput;
         Module._free(analyze_out)
         Module._free(asmout)
     });

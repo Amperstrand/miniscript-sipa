@@ -162,5 +162,59 @@ const char* miniscript_to_json(const char* ms) {
     return output;
 }
 
+/**
+ * Convert a miniscript expression to Rete.js-compatible graph JSON.
+ * 
+ * This function produces JSON that can be loaded directly into miniscript.fun
+ * (or any Rete.js-based editor) via `editor.fromJSON()`.
+ * 
+ * Usage from JavaScript:
+ *   // Using cwrap (recommended):
+ *   const miniscript_to_rete_json = Module.cwrap('miniscript_to_rete_json', 'string', ['string']);
+ *   const jsonStr = miniscript_to_rete_json("and_v(pk(A),after(100))");
+ *   const reteGraph = JSON.parse(jsonStr);
+ *   await editor.fromJSON(reteGraph);
+ * 
+ * @param ms The miniscript expression to parse
+ * @return A pointer to a null-terminated Rete JSON string (caller must free with Module._free)
+ */
+const char* miniscript_to_rete_json(const char* ms) {
+    std::string result = MiniscriptToReteJson(std::string(ms));
+    
+    // Allocate memory for the result string that can be freed by the caller
+    char* output = static_cast<char*>(malloc(result.size() + 1));
+    if (output) {
+        std::memcpy(output, result.c_str(), result.size() + 1);
+    }
+    return output;
 }
 
+/**
+ * Convert a miniscript to a complete Rete.js-compatible JSON graph with dummy nodes.
+ * 
+ * Similar to miniscript_to_rete_json, but adds:
+ *   - BIP39 nodes for each Key (using "bacon" x24 mnemonic)
+ *   - Descriptor node connected to the root policy
+ *   - Address node connected to the Descriptor
+ * 
+ * Usage from JavaScript:
+ *   const miniscript_to_complete_rete_json = Module.cwrap('miniscript_to_complete_rete_json', 'string', ['string']);
+ *   const jsonStr = miniscript_to_complete_rete_json("and_v(pk(A),pk(B))");
+ *   const reteGraph = JSON.parse(jsonStr);
+ *   // Graph now has BIP39 -> Key -> And -> Descriptor -> Address
+ * 
+ * @param ms The miniscript expression to parse
+ * @return A pointer to a null-terminated Rete JSON string (caller must free with Module._free)
+ */
+const char* miniscript_to_complete_rete_json(const char* ms) {
+    std::string result = MiniscriptToCompleteReteJson(std::string(ms));
+    
+    // Allocate memory for the result string that can be freed by the caller
+    char* output = static_cast<char*>(malloc(result.size() + 1));
+    if (output) {
+        std::memcpy(output, result.c_str(), result.size() + 1);
+    }
+    return output;
+}
+
+}
