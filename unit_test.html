@@ -1048,6 +1048,32 @@
                         }
                     },
                     {
+                        name: "All And/Or nodes must have both pol1 and pol2 inputs connected",
+                        run: () => {
+                            // Test complex nested or_c structure
+                            const result = miniscript_to_complete_rete_json("t:or_c(pk(key_revocation),and_v(v:pk(key_remote),or_c(pk(key_local),v:hash160(H))))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Find all And and Or nodes
+                            const andOrNodes = nodes.filter(n => n.name === "And" || n.name === "Or");
+                            assertTrue(andOrNodes.length > 0, "Should have at least one And/Or node");
+                            
+                            // Each And/Or node must have BOTH pol1 and pol2 connected
+                            andOrNodes.forEach(node => {
+                                assertExists(node.inputs.pol1, 
+                                    `${node.name} node ${node.id} must have pol1 input socket`);
+                                assertExists(node.inputs.pol2, 
+                                    `${node.name} node ${node.id} must have pol2 input socket`);
+                                
+                                assertTrue(node.inputs.pol1.connections.length > 0,
+                                    `${node.name} node ${node.id} must have pol1 connected (found ${node.inputs.pol1.connections.length} connections)`);
+                                assertTrue(node.inputs.pol2.connections.length > 0,
+                                    `${node.name} node ${node.id} must have pol2 connected (found ${node.inputs.pol2.connections.length} connections)`);
+                            });
+                        }
+                    },
+                    {
                         name: "Threshold uses 'policies' socket for all children",
                         run: () => {
                             const result = miniscript_to_rete_json("thresh(2,pk(A),s:pk(B),s:pk(C))");

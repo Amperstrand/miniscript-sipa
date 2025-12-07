@@ -381,6 +381,9 @@ struct ReteNode {
     std::vector<std::pair<int, std::string>> input_connections;  // Who connects to our inputs
     std::vector<std::pair<int, std::string>> output_connections; // Where we connect to
     
+    // For And/Or nodes: track which child index each input came from (for pol1/pol2 assignment)
+    std::vector<size_t> input_child_indices;
+    
     std::string input_socket;  // Socket name for our inputs
     std::string output_socket; // Socket name for our outputs
 };
@@ -489,6 +492,7 @@ int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
                 }
             }
             ctx.nodes[and_index].input_connections.push_back({cond_id, cond_output});
+            ctx.nodes[and_index].input_child_indices.push_back(0); // cond is child 0
         }
         
         // Connect then → And.pol2
@@ -502,6 +506,7 @@ int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
                 }
             }
             ctx.nodes[and_index].input_connections.push_back({then_id, then_output});
+            ctx.nodes[and_index].input_child_indices.push_back(1); // then is child 1
         }
         
         // Create the outer Or node: or(And_result, else)
@@ -526,6 +531,7 @@ int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
         // Connect And → Or.pol1
         ctx.nodes[and_index].output_connections.push_back({or_id, "pol1"});
         ctx.nodes[or_index].input_connections.push_back({and_id, "pol"});
+        ctx.nodes[or_index].input_child_indices.push_back(0); // and is child 0 of or
         
         // Connect else → Or.pol2
         if (else_id > 0) {
@@ -538,6 +544,7 @@ int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
                 }
             }
             ctx.nodes[or_index].input_connections.push_back({else_id, else_output});
+            ctx.nodes[or_index].input_child_indices.push_back(1); // else is child 1 of or
         }
         
         // Return the Or node's ID as this is the output of the decomposed andor
@@ -550,6 +557,32 @@ int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
     // Skip nodes without Rete components (like JUST_0, JUST_1)
     if (component_name.empty()) {
         return -1;
+    }
+    
+    // Special handling for And/Or nodes with JUST_0/JUST_1 children
+    // These are typically from wrappers like t: which creates and_v(X, 1)
+    // In this case, we skip the And node and just return the real child
+    if ((node->fragment == Fragment::AND_V || node->fragment == Fragment::AND_B ||
+         node->fragment == Fragment::OR_B || node->fragment == Fragment::OR_C ||
+         node->fragment == Fragment::OR_D || node->fragment == Fragment::OR_I) &&
+        node->subs.size() == 2) {
+        
+        bool child0_is_literal = (node->subs[0]->fragment == Fragment::JUST_0 || 
+                                   node->subs[0]->fragment == Fragment::JUST_1);
+        bool child1_is_literal = (node->subs[1]->fragment == Fragment::JUST_0 || 
+                                   node->subs[1]->fragment == Fragment::JUST_1);
+        
+        // If one child is a literal, return the other child's node (skip this And/Or)
+        if (child0_is_literal && !child1_is_literal) {
+            return BuildReteNodes(node->subs[1], ctx, wrapper_chain);
+        }
+        if (child1_is_literal && !child0_is_literal) {
+            return BuildReteNodes(node->subs[0], ctx, wrapper_chain);
+        }
+        // If both are literals, return -1 (shouldn't happen in practice)
+        if (child0_is_literal && child1_is_literal) {
+            return -1;
+        }
     }
     
     // Create the Rete node
@@ -640,6 +673,8 @@ int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
             
             // Add incoming connection to parent from child
             ctx.nodes[my_index].input_connections.push_back({child_id, child_output_socket});
+            // Track child index for And/Or socket assignment
+            ctx.nodes[my_index].input_child_indices.push_back(i);
         }
     }
     
@@ -721,19 +756,41 @@ std::string SerializeReteGraph(const ReteGraphContext& ctx, const std::string& o
         
         // inputs object - connections coming INTO this node
         oss << ",\"inputs\":{";
-        if (!n.input_connections.empty()) {
+        
+        // For And/Or nodes, ALWAYS declare both pol1 and pol2 sockets (even if empty)
+        // This is required by miniscript.fun - binary operators must have both inputs
+        if (n.name == "And" || n.name == "Or") {
+            std::map<std::string, std::vector<std::pair<int, std::string>>> grouped;
+            // Initialize both sockets
+            grouped["pol1"] = {};
+            grouped["pol2"] = {};
+            
+            // Assign connections to pol1/pol2 based on original child index (not connection order)
+            for (size_t idx = 0; idx < n.input_connections.size(); ++idx) {
+                size_t child_idx = idx < n.input_child_indices.size() ? n.input_child_indices[idx] : idx;
+                std::string socket = (child_idx == 0) ? "pol1" : "pol2";
+                grouped[socket].push_back(n.input_connections[idx]);
+            }
+            
+            bool first_socket = true;
+            for (const auto& [socket_name, conns] : grouped) {
+                if (!first_socket) oss << ",";
+                first_socket = false;
+                
+                oss << "\"" << socket_name << "\":{\"connections\":[";
+                for (size_t c = 0; c < conns.size(); ++c) {
+                    if (c > 0) oss << ",";
+                    oss << "{\"node\":" << conns[c].first;
+                    oss << ",\"output\":\"" << conns[c].second << "\"";
+                    oss << ",\"data\":{}}";
+                }
+                oss << "]}";
+            }
+        } else if (!n.input_connections.empty()) {
             // Group connections by input socket name
             std::map<std::string, std::vector<std::pair<int, std::string>>> grouped;
             
-            // For And/Or nodes, we need to assign connections to pol1/pol2
-            if (n.name == "And" || n.name == "Or") {
-                size_t idx = 0;
-                for (const auto& conn : n.input_connections) {
-                    std::string socket = (idx == 0) ? "pol1" : "pol2";
-                    grouped[socket].push_back(conn);
-                    idx++;
-                }
-            } else if (n.name == "Threshold" || n.name == "Multi") {
+            if (n.name == "Threshold" || n.name == "Multi") {
                 // All inputs go to "policies"
                 for (const auto& conn : n.input_connections) {
                     grouped["policies"].push_back(conn);
