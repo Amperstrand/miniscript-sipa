@@ -909,8 +909,11 @@ void AddDummyNodes(ReteGraphContext& ctx, int root_id) {
         bip39.name = "BIP39";
         bip39.mnemonic = BACON_MNEMONIC;
         
-        // Use password as index for multiple keys (empty for first key)
-        if (key_index > 1) {
+        // Use the original key name as password (for differentiation)
+        // This preserves the key identity while generating different keys
+        if (key_node.key && !key_node.key->empty()) {
+            bip39.password = *key_node.key;
+        } else if (key_index > 1) {
             bip39.password = std::to_string(key_index);
         }
         
@@ -925,8 +928,8 @@ void AddDummyNodes(ReteGraphContext& ctx, int root_id) {
         // Update Key node to receive from BIP39
         key_node.input_connections.push_back({bip39.id, "key"});
         
-        // Rename the key to "bacon N"
-        key_node.key = "bacon " + std::to_string(key_index);
+        // Keep the original key name (don't overwrite with "bacon N")
+        // key_node.key already has the original name like "key_remote"
         
         ctx.nodes.push_back(std::move(bip39));
         key_index++;

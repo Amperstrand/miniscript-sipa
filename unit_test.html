@@ -793,15 +793,28 @@
                         }
                     },
                     {
-                        name: "Keys are renamed to bacon N",
+                        name: "Keys preserve original names from miniscript",
                         run: () => {
-                            const result = miniscript_to_complete_rete_json("and_v(v:pk(A),pk(B))");
+                            const result = miniscript_to_complete_rete_json("and_v(v:pk(key_alice),pk(key_bob))");
                             const rete = JSON.parse(result);
                             const nodes = Object.values(rete.nodes);
                             const keyNodes = nodes.filter(n => n.name === "Key");
                             const keyNames = keyNodes.map(n => n.data.key).sort();
-                            assertTrue(keyNames.includes("bacon 1"), "Should have 'bacon 1' key");
-                            assertTrue(keyNames.includes("bacon 2"), "Should have 'bacon 2' key");
+                            assertTrue(keyNames.includes("key_alice"), "Should preserve 'key_alice' name");
+                            assertTrue(keyNames.includes("key_bob"), "Should preserve 'key_bob' name");
+                        }
+                    },
+                    {
+                        name: "BIP39 password uses original key name for differentiation",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(v:pk(key_alice),pk(key_bob))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const bip39Nodes = nodes.filter(n => n.name === "BIP39");
+                            const passwords = bip39Nodes.map(n => n.data.password || "").filter(p => p);
+                            // At least one BIP39 should have the key name as password
+                            assertTrue(passwords.some(p => p.includes("key_")), 
+                                "BIP39 password should use original key name for differentiation");
                         }
                     },
                     {
