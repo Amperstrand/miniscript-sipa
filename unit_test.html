@@ -1028,6 +1028,68 @@
                                 });
                             });
                         }
+                    },
+                    {
+                        name: "Threshold uses 'policies' socket for all children",
+                        run: () => {
+                            const result = miniscript_to_rete_json("thresh(2,pk(A),s:pk(B),s:pk(C))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const threshNode = nodes.find(n => n.name === "Threshold");
+                            
+                            // Threshold should use 'policies' socket (not pol1/pol2)
+                            assertExists(threshNode.inputs.policies, "Threshold should have 'policies' input socket");
+                            assertTrue(threshNode.inputs.policies.connections.length >= 3, 
+                                "Threshold should have at least 3 connections on 'policies' socket");
+                        }
+                    },
+                    {
+                        name: "Hash functions have 'pol' output socket",
+                        run: () => {
+                            const result = miniscript_to_rete_json("hash160(H)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const hashNode = nodes.find(n => n.name === "Hash160");
+                            
+                            assertExists(hashNode, "Should have Hash160 node");
+                            assertExists(hashNode.outputs.pol, "Hash160 should have 'pol' output socket");
+                            assertExists(hashNode.data.hash, "Hash160 should have 'hash' in data");
+                        }
+                    },
+                    {
+                        name: "Older/After have 'pol' output socket",
+                        run: () => {
+                            const result = miniscript_to_rete_json("and_v(older(100),after(200))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            const olderNode = nodes.find(n => n.name === "Older");
+                            const afterNode = nodes.find(n => n.name === "After");
+                            
+                            assertExists(olderNode.outputs.pol, "Older should have 'pol' output socket");
+                            assertExists(afterNode.outputs.pol, "After should have 'pol' output socket");
+                        }
+                    },
+                    {
+                        name: "Node IDs are integers matching string keys",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            
+                            Object.entries(rete.nodes).forEach(([keyStr, node]) => {
+                                assertEqual(node.id, Number(keyStr), 
+                                    `Node key '${keyStr}' should match node.id ${node.id}`);
+                                assertTrue(Number.isInteger(node.id), "Node ID should be an integer");
+                            });
+                        }
+                    },
+                    {
+                        name: "Graph ID is 'demo@0.1.0' for miniscript.fun compatibility",
+                        run: () => {
+                            const result = miniscript_to_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            assertEqual(rete.id, "demo@0.1.0", "Graph ID should be 'demo@0.1.0'");
+                        }
                     }
                 ]
             }
