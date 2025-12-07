@@ -170,14 +170,16 @@ For each edge `A.outSocket → B.inSocket`, you **must** update BOTH:
 | **outputs** | `pol` |
 | **data** | `{}` |
 
-### 4.8 AndOr
+### 4.8 AndOr - NOT SUPPORTED
 
-| Property | Value |
-|----------|-------|
-| **name** | `"AndOr"` |
-| **inputs** | `cond`, `pol1`, `pol2` |
-| **outputs** | `pol` |
-| **data** | `{}` |
+**IMPORTANT:** miniscript.fun does NOT have an AndOr component!
+
+When generating JSON from Miniscript that contains `andor(cond, then, else)`, we decompose it:
+- `andor(A, B, C)` → `or(and(A, B), C)`
+
+This creates:
+1. An **And** node with inputs from A (cond) and B (then)
+2. An **Or** node with inputs from the And result and C (else)
 
 ### 4.9 Hash Functions (SHA256, Hash256, RIPEMD160, Hash160)
 
@@ -214,7 +216,6 @@ For each edge `A.outSocket → B.inSocket`, you **must** update BOTH:
 | Key | `key` | `key` |
 | And | `pol1`, `pol2` | `pol` |
 | Or | `pol1`, `pol2` | `pol` |
-| AndOr | `cond`, `pol1`, `pol2` | `pol` |
 | Threshold | `policies` | `pol` |
 | Multi | `policies` (likely) | `pol` |
 | Older | (none) | `pol` |

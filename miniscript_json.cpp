@@ -292,7 +292,9 @@ std::string FragmentToReteComponent(Fragment frag) {
         case Fragment::MULTI:
             return "Multi";
         case Fragment::ANDOR:
-            return "AndOr";
+            // ANDOR is decomposed into Or(And(cond,then),else) in BuildReteNodes
+            // This should never be reached, but return empty to be safe
+            return "";
         // Wrappers and literals don't have direct components
         case Fragment::WRAP_A:
         case Fragment::WRAP_S:
@@ -432,6 +434,11 @@ int CalculateNodeDepth(const NodeRef<std::string>& node) {
 /**
  * Recursively build Rete nodes from a Miniscript tree.
  * Skips wrapper nodes and collects wrapper chain.
+ * 
+ * ANDOR Decomposition:
+ * miniscript.fun does NOT have an AndOr component. We decompose:
+ *   andor(cond, then, else) → or(and(cond, then), else)
+ * This creates an Or node with an And node as pol1 and else as pol2.
  */
 int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
                    std::vector<std::string>& wrapper_chain) {
@@ -443,6 +450,98 @@ int BuildReteNodes(const NodeRef<std::string>& node, ReteGraphContext& ctx,
             return BuildReteNodes(node->subs[0], ctx, wrapper_chain);
         }
         return -1; // Invalid: wrapper with no child
+    }
+    
+    // Special handling for ANDOR: decompose into Or(And(cond, then), else)
+    // miniscript.fun does NOT have an AndOr component!
+    if (node->fragment == Fragment::ANDOR && node->subs.size() == 3) {
+        // First, recursively build all three children
+        std::vector<std::string> cond_wrappers, then_wrappers, else_wrappers;
+        int cond_id = BuildReteNodes(node->subs[0], ctx, cond_wrappers);
+        int then_id = BuildReteNodes(node->subs[1], ctx, then_wrappers);
+        int else_id = BuildReteNodes(node->subs[2], ctx, else_wrappers);
+        
+        // Create the inner And node: and(cond, then)
+        ReteNode and_node;
+        and_node.id = ctx.next_id++;
+        and_node.name = "And";
+        and_node.fragment = "and_synthetic";
+        and_node.output_socket = "pol";
+        
+        // Position And node
+        int and_depth = CalculateNodeDepth(node) - 1;
+        and_node.pos_x = LAYOUT_BASE_X + and_depth * LAYOUT_X_SPACING;
+        int and_y_index = ctx.current_y_at_depth[and_depth]++;
+        and_node.pos_y = LAYOUT_BASE_Y + and_y_index * LAYOUT_Y_SPACING;
+        
+        int and_id = and_node.id;
+        ctx.nodes.push_back(std::move(and_node));
+        size_t and_index = ctx.nodes.size() - 1;
+        
+        // Connect cond → And.pol1
+        if (cond_id > 0) {
+            std::string cond_output = "pol";
+            for (auto& cn : ctx.nodes) {
+                if (cn.id == cond_id) {
+                    cond_output = cn.output_socket;
+                    cn.output_connections.push_back({and_id, "pol1"});
+                    break;
+                }
+            }
+            ctx.nodes[and_index].input_connections.push_back({cond_id, cond_output});
+        }
+        
+        // Connect then → And.pol2
+        if (then_id > 0) {
+            std::string then_output = "pol";
+            for (auto& cn : ctx.nodes) {
+                if (cn.id == then_id) {
+                    then_output = cn.output_socket;
+                    cn.output_connections.push_back({and_id, "pol2"});
+                    break;
+                }
+            }
+            ctx.nodes[and_index].input_connections.push_back({then_id, then_output});
+        }
+        
+        // Create the outer Or node: or(And_result, else)
+        ReteNode or_node;
+        or_node.id = ctx.next_id++;
+        or_node.name = "Or";
+        or_node.fragment = "or_synthetic";
+        or_node.output_socket = "pol";
+        or_node.wrappers = wrapper_chain;
+        
+        // Position Or node (at original andor depth)
+        int or_depth = CalculateNodeDepth(node);
+        ctx.max_depth = std::max(ctx.max_depth, or_depth);
+        or_node.pos_x = LAYOUT_BASE_X + or_depth * LAYOUT_X_SPACING;
+        int or_y_index = ctx.current_y_at_depth[or_depth]++;
+        or_node.pos_y = LAYOUT_BASE_Y + or_y_index * LAYOUT_Y_SPACING;
+        
+        int or_id = or_node.id;
+        ctx.nodes.push_back(std::move(or_node));
+        size_t or_index = ctx.nodes.size() - 1;
+        
+        // Connect And → Or.pol1
+        ctx.nodes[and_index].output_connections.push_back({or_id, "pol1"});
+        ctx.nodes[or_index].input_connections.push_back({and_id, "pol"});
+        
+        // Connect else → Or.pol2
+        if (else_id > 0) {
+            std::string else_output = "pol";
+            for (auto& cn : ctx.nodes) {
+                if (cn.id == else_id) {
+                    else_output = cn.output_socket;
+                    cn.output_connections.push_back({or_id, "pol2"});
+                    break;
+                }
+            }
+            ctx.nodes[or_index].input_connections.push_back({else_id, else_output});
+        }
+        
+        // Return the Or node's ID as this is the output of the decomposed andor
+        return or_id;
     }
     
     // Get the Rete component name
@@ -557,6 +656,9 @@ std::string SerializeReteGraph(const ReteGraphContext& ctx, const std::string& o
     // Use miniscript.fun's expected editor ID for compatibility
     oss << "\"id\":\"demo@0.1.0\"";
     
+    // Add network field for miniscript.fun compatibility
+    oss << ",\"network\":\"bitcoin\"";
+    
     // Nodes object
     oss << ",\"nodes\":{";
     
@@ -624,17 +726,10 @@ std::string SerializeReteGraph(const ReteGraphContext& ctx, const std::string& o
             std::map<std::string, std::vector<std::pair<int, std::string>>> grouped;
             
             // For And/Or nodes, we need to assign connections to pol1/pol2
-            if (n.name == "And" || n.name == "Or" || n.name == "AndOr") {
+            if (n.name == "And" || n.name == "Or") {
                 size_t idx = 0;
                 for (const auto& conn : n.input_connections) {
-                    std::string socket;
-                    if (n.name == "AndOr") {
-                        if (idx == 0) socket = "cond";
-                        else if (idx == 1) socket = "pol1";
-                        else socket = "pol2";
-                    } else {
-                        socket = (idx == 0) ? "pol1" : "pol2";
-                    }
+                    std::string socket = (idx == 0) ? "pol1" : "pol2";
                     grouped[socket].push_back(conn);
                     idx++;
                 }
@@ -679,6 +774,13 @@ std::string SerializeReteGraph(const ReteGraphContext& ctx, const std::string& o
                 }
                 oss << "]}";
             }
+        } else {
+            // No input connections, but some nodes still need empty sockets declared
+            // Key nodes always have a "key" input socket (for optional BIP39 connection)
+            if (n.name == "Key") {
+                oss << "\"key\":{\"connections\":[]}";
+            }
+            // Other nodes with no connections can have empty inputs object
         }
         oss << "}";
         
