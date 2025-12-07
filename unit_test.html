@@ -140,6 +140,52 @@
             border: 1px solid #f5c6cb;
         }
         
+        .test-error pre {
+            margin: 5px 0;
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .json-debug {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        
+        .json-debug code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .json-output {
+            max-height: 400px;
+            overflow: auto;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre;
+            margin-top: 5px;
+            cursor: text;
+            user-select: all;
+        }
+        
+        .failed-summary {
+            background: #fff5f5;
+            border: 2px solid #dc3545;
+        }
+        
+        .failed-summary h2 {
+            color: #dc3545;
+            border-bottom-color: #dc3545;
+        }
+        
         .test-assertion {
             margin-top: 5px;
             padding: 5px;
@@ -240,12 +286,40 @@
         let miniscript_to_complete_rete_json;
         let testResults = [];
         let allTests = [];
-        let showFailedOnly = false;
+        let showFailedOnly = true; // Default to showing only failed tests
+        
+        // Current test context for capturing JSON
+        let currentTestContext = null;
         
         // Log to console helper
         function log(message, data) {
             const msg = data ? `${message}: ${JSON.stringify(data)}` : message;
             console.log(msg);
+        }
+        
+        // Wrapper functions that capture JSON for debugging
+        function captureMiniscriptToJson(input) {
+            const result = miniscript_to_json(input);
+            if (currentTestContext) {
+                currentTestContext.inputs.push({ func: 'miniscript_to_json', input, output: result });
+            }
+            return result;
+        }
+        
+        function captureMiniscriptToReteJson(input) {
+            const result = miniscript_to_rete_json(input);
+            if (currentTestContext) {
+                currentTestContext.inputs.push({ func: 'miniscript_to_rete_json', input, output: result });
+            }
+            return result;
+        }
+        
+        function captureMiniscriptToCompleteReteJson(input) {
+            const result = miniscript_to_complete_rete_json(input);
+            if (currentTestContext) {
+                currentTestContext.inputs.push({ func: 'miniscript_to_complete_rete_json', input, output: result });
+            }
+            return result;
         }
         
         // Assertion helpers
@@ -1148,6 +1222,470 @@
                             const rete = JSON.parse(result);
                             assertEqual(rete.id, "demo@0.1.0", "Graph ID should be 'demo@0.1.0'");
                         }
+                    },
+                    {
+                        name: "Network field is always 'bitcoin'",
+                        run: () => {
+                            const result = miniscript_to_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            assertEqual(rete.network, "bitcoin", "Network should be 'bitcoin'");
+                        }
+                    },
+                    {
+                        name: "pkh() creates Key node (pubkey hash variant)",
+                        run: () => {
+                            const result = miniscript_to_rete_json("pkh(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const keyNode = nodes.find(n => n.name === "Key");
+                            assertExists(keyNode, "pkh() should create a Key node");
+                            assertEqual(keyNode.data.key, "A", "Key should have correct key name");
+                        }
+                    },
+                    {
+                        name: "ripemd160() creates Ripemd160 node",
+                        run: () => {
+                            const hash = "0".repeat(40);
+                            const result = miniscript_to_rete_json(`ripemd160(${hash})`);
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const ripemdNode = nodes.find(n => n.name === "Ripemd160");
+                            assertExists(ripemdNode, "Should have Ripemd160 node");
+                            assertExists(ripemdNode.outputs.pol, "Ripemd160 should have 'pol' output");
+                        }
+                    },
+                    {
+                        name: "sha256() creates SHA256 node",
+                        run: () => {
+                            const hash = "0".repeat(64);
+                            const result = miniscript_to_rete_json(`sha256(${hash})`);
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const shaNode = nodes.find(n => n.name === "SHA256");
+                            assertExists(shaNode, "Should have SHA256 node");
+                            assertExists(shaNode.outputs.pol, "SHA256 should have 'pol' output");
+                        }
+                    },
+                    {
+                        name: "hash256() creates Hash256 node",
+                        run: () => {
+                            const hash = "0".repeat(64);
+                            const result = miniscript_to_rete_json(`hash256(${hash})`);
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const hashNode = nodes.find(n => n.name === "Hash256");
+                            assertExists(hashNode, "Should have Hash256 node");
+                            assertExists(hashNode.outputs.pol, "Hash256 should have 'pol' output");
+                        }
+                    },
+                    {
+                        name: "Multiple wrappers are handled correctly (dv:older)",
+                        run: () => {
+                            // dv:older(100) has d: and v: wrappers - should create just an Older node
+                            const result = miniscript_to_rete_json("dv:older(100)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const olderNode = nodes.find(n => n.name === "Older");
+                            assertExists(olderNode, "Should have Older node even with multiple wrappers");
+                            assertEqual(nodes.length, 1, "Should have exactly 1 node (wrappers don't create nodes)");
+                        }
+                    },
+                    {
+                        name: "l: wrapper creates Or node (or_i(0,X))",
+                        run: () => {
+                            // l:pk(A) = or_i(0, pk(A)) - but JUST_0 gets skipped, so Or should be skipped too
+                            const result = miniscript_to_rete_json("l:pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            // l: creates or_i(0,X) which has JUST_0 child - the Or should be skipped
+                            const keyNode = nodes.find(n => n.name === "Key");
+                            assertExists(keyNode, "l:pk(A) should have Key node");
+                        }
+                    },
+                    {
+                        name: "u: wrapper creates Or node (or_i(X,0))",
+                        run: () => {
+                            // u:pk(A) = or_i(pk(A), 0) - but JUST_0 gets skipped, so Or should be skipped too
+                            const result = miniscript_to_rete_json("u:pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            const keyNode = nodes.find(n => n.name === "Key");
+                            assertExists(keyNode, "u:pk(A) should have Key node");
+                        }
+                    },
+                    {
+                        name: "Deeply nested expression (5+ levels)",
+                        run: () => {
+                            // or_i(and_v(v:pk(A),or_i(and_v(v:pk(B),pk(C)),pk(D))),pk(E))
+                            const result = miniscript_to_rete_json("or_i(and_v(v:pk(A),or_i(and_v(v:pk(B),pk(C)),pk(D))),pk(E))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Should have 5 Key nodes
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            assertEqual(keyNodes.length, 5, "Should have 5 Key nodes");
+                            
+                            // Should have 2 And nodes and 2 Or nodes
+                            const andNodes = nodes.filter(n => n.name === "And");
+                            const orNodes = nodes.filter(n => n.name === "Or");
+                            assertEqual(andNodes.length, 2, "Should have 2 And nodes");
+                            assertEqual(orNodes.length, 2, "Should have 2 Or nodes");
+                        }
+                    },
+                    {
+                        name: "All output connections have correct socket names",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(v:pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            
+                            Object.values(rete.nodes).forEach(node => {
+                                Object.entries(node.outputs || {}).forEach(([socketName, socket]) => {
+                                    (socket.connections || []).forEach(conn => {
+                                        // Verify connection has 'input' field
+                                        assertExists(conn.input, 
+                                            `Output connection from ${node.name} should have 'input' field`);
+                                        // Verify connection has 'node' field  
+                                        assertExists(conn.node,
+                                            `Output connection from ${node.name} should have 'node' field`);
+                                    });
+                                });
+                            });
+                        }
+                    },
+                    {
+                        name: "All nodes have required connections based on type",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("and_v(v:pk(A),pk(B))");
+                            const rete = JSON.parse(result);
+                            
+                            const errors = [];
+                            
+                            Object.values(rete.nodes).forEach(node => {
+                                // Define expected connectivity rules per node type
+                                switch(node.name) {
+                                    case "And":
+                                    case "Or":
+                                        // Must have pol1 and pol2 inputs connected
+                                        if (!node.inputs.pol1?.connections?.length) {
+                                            errors.push(`${node.name} node ${node.id}: pol1 not connected`);
+                                        }
+                                        if (!node.inputs.pol2?.connections?.length) {
+                                            errors.push(`${node.name} node ${node.id}: pol2 not connected`);
+                                        }
+                                        // Must have pol output connected (except root)
+                                        break;
+                                        
+                                    case "Key":
+                                        // Must have key output connected to something
+                                        if (!node.outputs.key?.connections?.length) {
+                                            errors.push(`Key node ${node.id}: key output not connected`);
+                                        }
+                                        break;
+                                        
+                                    case "BIP39":
+                                        // Must have key output connected to a Key node
+                                        if (!node.outputs.key?.connections?.length) {
+                                            errors.push(`BIP39 node ${node.id}: key output not connected`);
+                                        }
+                                        break;
+                                        
+                                    case "Descriptor":
+                                        // Must have pol input connected
+                                        if (!node.inputs.pol?.connections?.length) {
+                                            errors.push(`Descriptor node ${node.id}: pol input not connected`);
+                                        }
+                                        // Must have desc output connected
+                                        if (!node.outputs.desc?.connections?.length) {
+                                            errors.push(`Descriptor node ${node.id}: desc output not connected`);
+                                        }
+                                        break;
+                                        
+                                    case "Address":
+                                        // Must have desc input connected
+                                        if (!node.inputs.desc?.connections?.length) {
+                                            errors.push(`Address node ${node.id}: desc input not connected`);
+                                        }
+                                        // addr output may be unconnected (terminal node)
+                                        break;
+                                        
+                                    case "Threshold":
+                                        // Must have policies input with at least 2 connections
+                                        if (!node.inputs.policies?.connections?.length || 
+                                            node.inputs.policies.connections.length < 2) {
+                                            errors.push(`Threshold node ${node.id}: needs at least 2 policies connected`);
+                                        }
+                                        break;
+                                        
+                                    case "Older":
+                                    case "After":
+                                    case "SHA256":
+                                    case "Hash256":
+                                    case "Hash160":
+                                    case "Ripemd160":
+                                        // Leaf nodes: must have pol output connected
+                                        if (!node.outputs.pol?.connections?.length) {
+                                            errors.push(`${node.name} node ${node.id}: pol output not connected`);
+                                        }
+                                        break;
+                                }
+                            });
+                            
+                            if (errors.length > 0) {
+                                throw new Error("Connectivity issues:\n" + errors.join("\n"));
+                            }
+                        }
+                    },
+                    {
+                        name: "Complex graph has all nodes properly connected",
+                        run: () => {
+                            // Test a more complex miniscript
+                            const result = miniscript_to_complete_rete_json(
+                                "andor(pk(key_remote),or_i(and_v(v:pkh(key_local),hash160(H)),older(1008)),pk(key_revocation))"
+                            );
+                            const rete = JSON.parse(result);
+                            
+                            const errors = [];
+                            const nodeCount = Object.keys(rete.nodes).length;
+                            
+                            // Should have multiple nodes
+                            assertTrue(nodeCount >= 10, `Should have at least 10 nodes, got ${nodeCount}`);
+                            
+                            // Check each And/Or node has both inputs
+                            Object.values(rete.nodes).forEach(node => {
+                                if (node.name === "And" || node.name === "Or") {
+                                    if (!node.inputs.pol1?.connections?.length) {
+                                        errors.push(`${node.name} node ${node.id}: missing pol1`);
+                                    }
+                                    if (!node.inputs.pol2?.connections?.length) {
+                                        errors.push(`${node.name} node ${node.id}: missing pol2`);
+                                    }
+                                }
+                            });
+                            
+                            if (errors.length > 0) {
+                                throw new Error("Complex graph connectivity issues:\n" + errors.join("\n"));
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                name: "Common Miniscript Use Cases",
+                tests: [
+                    {
+                        name: "Single key (pk(A))",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("pk(A)");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Should have Key, BIP39, Descriptor, Address
+                            const keyNode = nodes.find(n => n.name === "Key");
+                            const bip39Node = nodes.find(n => n.name === "BIP39");
+                            const descNode = nodes.find(n => n.name === "Descriptor");
+                            const addrNode = nodes.find(n => n.name === "Address");
+                            
+                            assertExists(keyNode, "Should have Key node");
+                            assertExists(bip39Node, "Should have BIP39 node");
+                            assertExists(descNode, "Should have Descriptor node");
+                            assertExists(addrNode, "Should have Address node");
+                            
+                            // Key should connect to Descriptor
+                            assertTrue(descNode.inputs.pol.connections.length > 0, 
+                                "Descriptor should be connected to policy");
+                        }
+                    },
+                    {
+                        name: "One of two keys (equally likely) - or_b",
+                        run: () => {
+                            const result = miniscript_to_complete_rete_json("or_b(pk(A),s:pk(B))");
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Should have Or node with 2 keys
+                            const orNode = nodes.find(n => n.name === "Or");
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            assertExists(orNode, "Should have Or node");
+                            assertEqual(keyNodes.length, 2, "Should have 2 Key nodes");
+                            
+                            // Or node should have both inputs connected
+                            assertTrue(orNode.inputs.pol1.connections.length > 0, "Or should have pol1 connected");
+                            assertTrue(orNode.inputs.pol2.connections.length > 0, "Or should have pol2 connected");
+                        }
+                    },
+                    {
+                        name: "One of two keys (one likely, one unlikely) - or_d",
+                        run: () => {
+                            // or_d(pk(likely),and_v(v:pk(unlikely),older(1000)))
+                            const result = miniscript_to_complete_rete_json(
+                                "or_d(pk(likely),and_v(v:pk(unlikely),older(1000)))"
+                            );
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Should have Or, And, 2 Keys, and Older
+                            const orNode = nodes.find(n => n.name === "Or");
+                            const andNode = nodes.find(n => n.name === "And");
+                            const olderNode = nodes.find(n => n.name === "Older");
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            assertExists(orNode, "Should have Or node");
+                            assertExists(andNode, "Should have And node");
+                            assertExists(olderNode, "Should have Older node");
+                            assertEqual(keyNodes.length, 2, "Should have 2 Key nodes");
+                            assertEqual(olderNode.data.num, 1000, "Older should have num=1000");
+                        }
+                    },
+                    {
+                        name: "User + 2FA with 90-day timeout",
+                        run: () => {
+                            // and_v(or_c(pk(user),v:older(12960)),pk(service))
+                            // 12960 blocks ≈ 90 days
+                            const result = miniscript_to_complete_rete_json(
+                                "and_v(or_c(pk(user),v:older(12960)),pk(service))"
+                            );
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Should have And, Or, 2 Keys, and Older
+                            const andNode = nodes.find(n => n.name === "And");
+                            const orNode = nodes.find(n => n.name === "Or");
+                            const olderNode = nodes.find(n => n.name === "Older");
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            assertExists(andNode, "Should have And node");
+                            assertExists(orNode, "Should have Or node");
+                            assertExists(olderNode, "Should have Older node");
+                            assertEqual(keyNodes.length, 2, "Should have 2 Key nodes");
+                            assertEqual(olderNode.data.num, 12960, "Older should have num=12960 (90 days)");
+                            
+                            // Check key names are preserved
+                            const keyNames = keyNodes.map(k => k.data.key);
+                            assertTrue(keyNames.includes("user"), "Should have 'user' key");
+                            assertTrue(keyNames.includes("service"), "Should have 'service' key");
+                        }
+                    },
+                    {
+                        name: "3-of-3 that decays to 2-of-3 after 90 days",
+                        run: () => {
+                            // thresh(3,pk(A),s:pk(B),s:pk(C),sln:older(12960))
+                            const result = miniscript_to_complete_rete_json(
+                                "thresh(3,pk(A),s:pk(B),s:pk(C),sln:older(12960))"
+                            );
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Should have Threshold, 3 Keys, and Older
+                            const threshNode = nodes.find(n => n.name === "Threshold");
+                            const olderNode = nodes.find(n => n.name === "Older");
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            assertExists(threshNode, "Should have Threshold node");
+                            assertExists(olderNode, "Should have Older node");
+                            assertEqual(keyNodes.length, 3, "Should have 3 Key nodes");
+                            assertEqual(threshNode.data.thresh, 3, "Threshold should require 3");
+                            assertEqual(olderNode.data.num, 12960, "Older should have num=12960 (90 days)");
+                            
+                            // Threshold should have 4 policies connected (3 keys + older)
+                            assertTrue(threshNode.inputs.policies.connections.length >= 4,
+                                "Threshold should have 4 policies connected");
+                        }
+                    },
+                    {
+                        name: "BOLT #3: to_local revocation policy",
+                        run: () => {
+                            // andor(pk(key_revocation),older(1008),and_v(v:pk(key_local),pk(key_remote)))
+                            const result = miniscript_to_complete_rete_json(
+                                "andor(pk(key_revocation),older(1008),and_v(v:pk(key_local),pk(key_remote)))"
+                            );
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // andor(A,B,C) decomposes to or(and(A,B),C)
+                            const orNode = nodes.find(n => n.name === "Or");
+                            const andNodes = nodes.filter(n => n.name === "And");
+                            const olderNode = nodes.find(n => n.name === "Older");
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            assertExists(orNode, "Should have Or node (from andor decomposition)");
+                            assertTrue(andNodes.length >= 1, "Should have at least 1 And node");
+                            assertExists(olderNode, "Should have Older node");
+                            assertEqual(keyNodes.length, 3, "Should have 3 Key nodes");
+                            assertEqual(olderNode.data.num, 1008, "Older should have num=1008 (1 week)");
+                            
+                            // Check key names preserved
+                            const keyNames = keyNodes.map(k => k.data.key);
+                            assertTrue(keyNames.includes("key_revocation"), "Should have 'key_revocation' key");
+                            assertTrue(keyNames.includes("key_local"), "Should have 'key_local' key");
+                            assertTrue(keyNames.includes("key_remote"), "Should have 'key_remote' key");
+                        }
+                    },
+                    {
+                        name: "BOLT #3: simplified offered HTLC",
+                        run: () => {
+                            // or_d(pk(key_revocation),and_v(v:sha256(H),and_v(v:pk(key_remotehtlc),pk(key_localhtlc))))
+                            const hash = "0000000000000000000000000000000000000000000000000000000000000001";
+                            const result = miniscript_to_complete_rete_json(
+                                `or_d(pk(key_revocation),and_v(v:sha256(${hash}),and_v(v:pk(key_remotehtlc),pk(key_localhtlc))))`
+                            );
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // Should have Or, And(s), SHA256, and 3 Keys
+                            const orNode = nodes.find(n => n.name === "Or");
+                            const andNodes = nodes.filter(n => n.name === "And");
+                            const sha256Node = nodes.find(n => n.name === "SHA256");
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            assertExists(orNode, "Should have Or node");
+                            assertTrue(andNodes.length >= 2, "Should have at least 2 And nodes");
+                            assertExists(sha256Node, "Should have SHA256 node");
+                            assertEqual(keyNodes.length, 3, "Should have 3 Key nodes");
+                            
+                            // Check key names
+                            const keyNames = keyNodes.map(k => k.data.key);
+                            assertTrue(keyNames.includes("key_revocation"), "Should have 'key_revocation' key");
+                            assertTrue(keyNames.includes("key_remotehtlc"), "Should have 'key_remotehtlc' key");
+                            assertTrue(keyNames.includes("key_localhtlc"), "Should have 'key_localhtlc' key");
+                        }
+                    },
+                    {
+                        name: "BOLT #3: received HTLC",
+                        run: () => {
+                            // andor(pk(key_revocation),older(1008),or_i(and_v(v:sha256(H),pk(key_remotehtlc)),and_v(v:older(100),pk(key_localhtlc))))
+                            const hash = "0000000000000000000000000000000000000000000000000000000000000001";
+                            const result = captureMiniscriptToCompleteReteJson(
+                                `andor(pk(key_revocation),older(1008),or_i(and_v(v:sha256(${hash}),pk(key_remotehtlc)),and_v(v:older(100),pk(key_localhtlc))))`
+                            );
+                            const rete = JSON.parse(result);
+                            const nodes = Object.values(rete.nodes);
+                            
+                            // andor(A,B,C) decomposes to or(and(A,B),C)
+                            // Should have Or nodes, And nodes, SHA256, Older nodes, and 3 Keys
+                            const orNodes = nodes.filter(n => n.name === "Or");
+                            const andNodes = nodes.filter(n => n.name === "And");
+                            const sha256Node = nodes.find(n => n.name === "SHA256");
+                            const olderNodes = nodes.filter(n => n.name === "Older");
+                            const keyNodes = nodes.filter(n => n.name === "Key");
+                            
+                            assertTrue(orNodes.length >= 1, "Should have at least 1 Or node");
+                            assertTrue(andNodes.length >= 2, "Should have at least 2 And nodes");
+                            assertExists(sha256Node, "Should have SHA256 node");
+                            assertTrue(olderNodes.length >= 2, "Should have at least 2 Older nodes");
+                            assertEqual(keyNodes.length, 3, "Should have 3 Key nodes");
+                            
+                            // Check key names
+                            const keyNames = keyNodes.map(k => k.data.key);
+                            assertTrue(keyNames.includes("key_revocation"), "Should have 'key_revocation' key");
+                            assertTrue(keyNames.includes("key_remotehtlc"), "Should have 'key_remotehtlc' key");
+                            assertTrue(keyNames.includes("key_localhtlc"), "Should have 'key_localhtlc' key");
+                            
+                            // Check older values
+                            const olderNums = olderNodes.map(n => n.data.num).sort((a,b) => a-b);
+                            assertTrue(olderNums.includes(100), "Should have Older(100) for HTLC timeout");
+                            assertTrue(olderNums.includes(1008), "Should have Older(1008) for revocation delay");
+                        }
                     }
                 ]
             }
@@ -1162,26 +1700,40 @@
             testSuites.forEach(suite => {
                 log(`📦 Running test suite: ${suite.name}`);
                 suite.tests.forEach(test => {
+                    // Set up test context to capture JSON
+                    currentTestContext = { inputs: [] };
+                    
                     try {
                         test.run();
                         testResults.push({
                             suite: suite.name,
                             name: test.name,
                             passed: true,
-                            error: null
+                            error: null,
+                            jsonData: null
                         });
                         log(`  ✓ ${test.name}`);
                         passed++;
                     } catch (e) {
+                        // Include captured JSON data in error
+                        const jsonData = currentTestContext.inputs.length > 0 
+                            ? currentTestContext.inputs 
+                            : null;
                         testResults.push({
                             suite: suite.name,
                             name: test.name,
                             passed: false,
-                            error: e.message
+                            error: e.message,
+                            jsonData: jsonData
                         });
                         log(`  ✗ ${test.name}: ${e.message}`);
+                        if (jsonData) {
+                            log(`    JSON data:`, jsonData);
+                        }
                         failed++;
                     }
+                    
+                    currentTestContext = null;
                 });
             });
             
@@ -1193,6 +1745,48 @@
             const container = document.getElementById('testContainer');
             container.innerHTML = '';
             
+            // Show summary of failed tests at top if there are failures
+            const failedTests = testResults.filter(r => !r.passed);
+            if (failedTests.length > 0) {
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'test-suite failed-summary';
+                summaryDiv.innerHTML = `<h2>❌ Failed Tests (${failedTests.length})</h2>`;
+                
+                failedTests.forEach(result => {
+                    const testDiv = document.createElement('div');
+                    testDiv.className = 'test-case failed';
+                    
+                    let jsonSection = '';
+                    if (result.jsonData) {
+                        result.jsonData.forEach((item, idx) => {
+                            const prettyJson = JSON.stringify(JSON.parse(item.output), null, 2);
+                            jsonSection += `
+                                <div class="json-debug">
+                                    <strong>Input:</strong> <code>${escapeHtml(item.input)}</code><br>
+                                    <strong>Function:</strong> <code>${item.func}</code><br>
+                                    <strong>Output JSON (copy this):</strong>
+                                    <pre class="json-output">${escapeHtml(prettyJson)}</pre>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    testDiv.innerHTML = `
+                        <div class="test-title">
+                            <span class="test-icon">✗</span>
+                            <strong>${result.suite}</strong> → ${result.name}
+                        </div>
+                        <div class="test-error"><strong>Error:</strong><br><pre>${escapeHtml(result.error)}</pre></div>
+                        ${jsonSection}
+                    `;
+                    
+                    summaryDiv.appendChild(testDiv);
+                });
+                
+                container.appendChild(summaryDiv);
+            }
+            
+            // Show all suites (respecting showFailedOnly)
             const suitesMap = {};
             testResults.forEach(result => {
                 if (!suitesMap[result.suite]) {
@@ -1202,17 +1796,27 @@
             });
             
             Object.keys(suitesMap).forEach(suiteName => {
+                const suiteResults = suitesMap[suiteName];
+                const suiteHasFailures = suiteResults.some(r => !r.passed);
+                
+                // Skip suites with no failures if showFailedOnly
+                if (showFailedOnly && !suiteHasFailures) {
+                    return;
+                }
+                
                 const suiteDiv = document.createElement('div');
                 suiteDiv.className = 'test-suite';
-                suiteDiv.innerHTML = `<h2>${suiteName}</h2>`;
+                const passedCount = suiteResults.filter(r => r.passed).length;
+                suiteDiv.innerHTML = `<h2>${suiteName} (${passedCount}/${suiteResults.length} passed)</h2>`;
                 
-                suitesMap[suiteName].forEach(result => {
+                suiteResults.forEach(result => {
+                    // Skip passed tests if showFailedOnly
+                    if (showFailedOnly && result.passed) {
+                        return;
+                    }
+                    
                     const testDiv = document.createElement('div');
                     testDiv.className = `test-case ${result.passed ? 'passed' : 'failed'}`;
-                    
-                    if (showFailedOnly && result.passed) {
-                        testDiv.classList.add('hidden');
-                    }
                     
                     testDiv.innerHTML = `
                         <div class="test-title">
