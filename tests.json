@@ -1,0 +1,23 @@
+{
+  "testSuites": [
+    {
+      "name": "Basic Fragment Tests",
+      "description": "Tests for basic miniscript fragment parsing",
+      "tests": [
+        {
+          "name": "Parse simple pk(A)",
+          "description": "Test basic public key parsing",
+          "function": "miniscript_to_json",
+          "input": "pk(A)",
+          "assertions": [
+            {"type": "true", "value": "ast.valid", "message": "pk(A) should parse successfully"},
+            {"type": "equal", "value": "ast.root.fragment", "expected": "c", "message": "Root should be wrapper 'c'"},
+            {"type": "exists", "value": "ast.root.children", "message": "Should have children"},
+            {"type": "equal", "value": "ast.root.children[0].fragment", "expected": "pk_k", "message": "Child should be pk_k"},
+            {"type": "equal", "value": "ast.root.children[0].args[0]", "expected": "A", "message": "Should have key A as argument"}
+          ]
+        }
+      ]
+    }
+  ]
+}

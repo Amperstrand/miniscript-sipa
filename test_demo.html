@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>JSON Test Runner Demo</title>
+</head>
+<body>
+    <h1>JSON Test Runner Demo</h1>
+    <button onclick="runTests()">Run JSON Tests</button>
+    <div id="results"></div>
+    
+    <script src="miniscript.js"></script>
+    <script src="test_runner.js"></script>
+    <script>
+        let runner;
+        
+        async function initialize() {
+            runner = new JsonTestRunner();
+            await runner.loadTests();
+        }
+        
+        async function runTests() {
+            if (!runner) {
+                await initialize();
+            }
+            
+            const results = await runner.runAllTests();
+            const resultsDiv = document.getElementById('results');
+            
+            resultsDiv.innerHTML = '<h2>Results:</h2>' +
+                results.map(r => `${r.passed ? '✓' : '✗'} ${r.suite} → ${r.test}${r.error ? ': ' + r.error : ''}`).join('<br>');
+        }
+        
+        // Auto-initialize when WASM is ready
+        if (typeof Module !== 'undefined') {
+            Module.onRuntimeInitialized = initialize;
+        }
+    </script>
+</body>
+</html>
